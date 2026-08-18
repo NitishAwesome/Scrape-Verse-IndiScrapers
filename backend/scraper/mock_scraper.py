@@ -1,25 +1,14 @@
-MOCK_SUCCESS_DATA = {
-    "collector_id": "c_mock_123456",
-    "status": "success",
-    "records_extracted": 1,
-    "data": [
-        {
-            "title": "Wireless Gaming Mouse",
-            "price": "$49.99",
-            "status": "In Stock"
-        }
-    ]
-}
+"""
+Backward-compatible wrapper for the original mock_scraper module.
 
-MOCK_FAILURE_DATA = {
-    "collector_id": "c_mock_123456",
-    "status": "failed",
-    "error": "SelectorNotFound: .product-price",
-    "records_extracted": 0,
-    "data": []
-}
+Prefer importing from backend.scraper.service for new code.
+"""
 
-def run_scraper(trigger_failure: bool = False):
-    if trigger_failure:
-        return MOCK_FAILURE_DATA
-    return MOCK_SUCCESS_DATA
+from backend.scraper.service import ScraperService
+
+_service = ScraperService()
+
+
+def run_scraper(trigger_failure: bool = False) -> dict:
+    """Legacy helper used by backend/main.py before the service layer existed."""
+    return _service.execute_dict(trigger_failure=trigger_failure)
