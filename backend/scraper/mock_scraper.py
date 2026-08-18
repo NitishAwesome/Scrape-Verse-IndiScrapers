@@ -9,6 +9,12 @@ from backend.scraper.service import ScraperService
 _service = ScraperService()
 
 
-def run_scraper(trigger_failure: bool = False) -> dict:
-    """Legacy helper used by backend/main.py before the service layer existed."""
-    return _service.execute_dict(trigger_failure=trigger_failure)
+def run_scrape(fail: bool = False, trigger_failure: bool = False) -> dict:
+    """Run scrape and return dict result, supporting fail/trigger_failure flags."""
+    return _service.execute_dict(trigger_failure=(fail or trigger_failure))
+
+
+def run_scraper(trigger_failure: bool = False, fail: bool = False) -> dict:
+    """Legacy helper used before the service layer existed."""
+    return run_scrape(fail=fail, trigger_failure=trigger_failure)
+

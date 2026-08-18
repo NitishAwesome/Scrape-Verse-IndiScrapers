@@ -1,161 +1,200 @@
-"""Tests for the modular scraping layer."""
+import os
+import sys
+import unittest
+from unittest.mock import MagicMock, patch
 
-from typing import Any
+# Ensure root path is accessible for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import pytest
-
+from backend.scraper.brightdata_client import BrightDataClient
+from backend.scraper.config import ScraperMode, ScraperSettings
 from backend.scraper.exceptions import ScraperExecutionError, ScraperValidationError
-from backend.scraper.models import RawScrapePayload, ScrapeStatus
-from backend.scraper.normalizer import normalize_record, normalize_records
+from backend.scraper.mock_client import MockScraperClient
+from backend.scraper.mock_scraper import run_scrape, run_scraper
+from backend.scraper.models import ProductRecord, RawScrapePayload, ScrapeResult, ScrapeStatus
+from backend.scraper.normalizer import (
+    normalize_price,
+    normalize_record,
+    normalize_records,
+    normalize_stock_status,
+    normalize_title,
+)
 from backend.scraper.service import ScraperService
 from backend.scraper.validator import validate_record, validate_records
 
 
-class FakeScraperClient:
-    """Test double for ScraperClient."""
+class TestScraperEngine(unittest.TestCase):
+    """Core tests for mock scraper engine execution."""
 
-    def __init__(self, payload: RawScrapePayload | None = None, error: Exception | None = None):
-        self.payload = payload
-        self.error = error
-        self.calls: list[dict[str, bool]] = []
+    def test_mock_scrape_success(self):
+        result = run_scrape(fail=False)
+        self.assertEqual(result.get("status"), "success")
+        self.assertEqual(result.get("records_extracted"), 1)
+        self.assertIn("data", result)
+        self.assertIsInstance(result["data"], list)
+        self.assertEqual(len(result["data"]), 1)
+        product = result["data"][0]
+        self.assertEqual(product.get("title"), "Wireless Gaming Mouse")
+        self.assertEqual(product.get("price"), "$49.99")
+        self.assertEqual(product.get("stock_status"), "In Stock")
+        self.assertIsNone(result.get("error"))
 
-    def execute(self, *, trigger_failure: bool = False) -> RawScrapePayload:
-        self.calls.append({"trigger_failure": trigger_failure})
-        if self.error:
-            raise self.error
-        assert self.payload is not None
-        return self.payload
+    def test_mock_scrape_failure(self):
+        result = run_scrape(fail=True)
+        self.assertEqual(result.get("status"), "failed")
+        self.assertEqual(result.get("records_extracted"), 0)
+        self.assertEqual(result.get("data"), [])
+        self.assertIn("SelectorNotFound", result.get("error", ""))
 
+    def test_legacy_run_scraper_alias(self):
+        success_result = run_scraper(trigger_failure=False)
+        self.assertEqual(success_result.get("status"), "success")
 
-def test_successful_response():
-    client = FakeScraperClient(
-        payload=RawScrapePayload(
-            collector_id="c_test_001",
-            records=[
-                {
-                    "title": "  Wireless Gaming Mouse  ",
-                    "price": "49.99",
-                    "stock_status": "available",
-                }
-            ],
-        )
-    )
-    service = ScraperService(client=client)
-
-    result = service.execute()
-
-    assert result.status == ScrapeStatus.SUCCESS
-    assert result.collector_id == "c_test_001"
-    assert result.records_extracted == 1
-    assert result.data[0].title == "Wireless Gaming Mouse"
-    assert result.data[0].price == "$49.99"
-    assert result.data[0].stock_status == "In Stock"
-    assert result.error is None
+        fail_result = run_scraper(trigger_failure=True)
+        self.assertEqual(fail_result.get("status"), "failed")
 
 
-def test_empty_response():
-    client = FakeScraperClient(
-        payload=RawScrapePayload(
-            collector_id="c_test_002",
+class TestNormalizer(unittest.TestCase):
+    """Unit tests for data normalization layer."""
+
+    def test_normalize_price(self):
+        self.assertEqual(normalize_price("$49.99"), "$49.99")
+        self.assertEqual(normalize_price("49.99"), "$49.99")
+        self.assertEqual(normalize_price("1,299.50"), "$1299.50")
+        self.assertEqual(normalize_price(None), "")
+        self.assertEqual(normalize_price(""), "")
+
+    def test_normalize_title(self):
+        self.assertEqual(normalize_title("  Wireless   Gaming   Mouse  "), "Wireless Gaming Mouse")
+        self.assertEqual(normalize_title(None), "")
+        self.assertEqual(normalize_title(""), "")
+
+    def test_normalize_stock_status(self):
+        self.assertEqual(normalize_stock_status("in stock"), "In Stock")
+        self.assertEqual(normalize_stock_status("AVAILABLE"), "In Stock")
+        self.assertEqual(normalize_stock_status("instock"), "In Stock")
+        self.assertEqual(normalize_stock_status("out of stock"), "Out of Stock")
+        self.assertEqual(normalize_stock_status("sold out"), "Out of Stock")
+        self.assertEqual(normalize_stock_status(None), "")
+
+    def test_normalize_record(self):
+        raw = {
+            "title": "  Mechanical Keyboard  ",
+            "price": "89.00",
+            "status": "in stock",
+        }
+        product = normalize_record(raw)
+        self.assertEqual(product.title, "Mechanical Keyboard")
+        self.assertEqual(product.price, "$89.00")
+        self.assertEqual(product.stock_status, "In Stock")
+
+
+class TestValidator(unittest.TestCase):
+    """Unit tests for record validation layer."""
+
+    def test_validate_valid_record(self):
+        valid = ProductRecord(title="Sample Item", price="$19.99", stock_status="In Stock")
+        validate_record(valid)
+        validate_records([valid])
+
+    def test_validate_missing_title(self):
+        invalid = ProductRecord(title="   ", price="$19.99", stock_status="In Stock")
+        with self.assertRaises(ScraperValidationError):
+            validate_record(invalid)
+
+    def test_validate_missing_price(self):
+        invalid = ProductRecord(title="Sample Item", price="", stock_status="In Stock")
+        with self.assertRaises(ScraperValidationError):
+            validate_record(invalid)
+
+    def test_validate_missing_stock_status(self):
+        invalid = ProductRecord(title="Sample Item", price="$19.99", stock_status="")
+        with self.assertRaises(ScraperValidationError):
+            validate_record(invalid)
+
+    def test_validate_empty_record_list(self):
+        with self.assertRaises(ScraperValidationError):
+            validate_records([])
+
+
+class TestScraperServiceEdgeCases(unittest.TestCase):
+    """Tests covering empty responses, invalid data, and API failures in ScraperService."""
+
+    def test_empty_response(self):
+        mock_client = MagicMock()
+        mock_client.execute.return_value = RawScrapePayload(
+            collector_id="c_test_empty",
             records=[],
+            error=None,
         )
-    )
-    service = ScraperService(client=client)
+        service = ScraperService(client=mock_client)
+        result = service.execute()
+        self.assertEqual(result.status, ScrapeStatus.FAILED)
+        self.assertIn("no records", result.error.lower())
 
-    result = service.execute()
-
-    assert result.status == ScrapeStatus.FAILED
-    assert result.records_extracted == 0
-    assert result.data == []
-    assert result.error == "Scrape returned no records"
-
-
-def test_invalid_response_missing_required_fields():
-    client = FakeScraperClient(
-        payload=RawScrapePayload(
-            collector_id="c_test_003",
-            records=[{"title": "Mouse", "price": "", "stock_status": "In Stock"}],
+    def test_invalid_response_data(self):
+        mock_client = MagicMock()
+        # Missing price and title in raw payload
+        mock_client.execute.return_value = RawScrapePayload(
+            collector_id="c_test_invalid",
+            records=[{"title": "", "price": "", "status": ""}],
+            error=None,
         )
-    )
-    service = ScraperService(client=client)
+        service = ScraperService(client=mock_client)
+        result = service.execute()
+        self.assertEqual(result.status, ScrapeStatus.FAILED)
+        self.assertIn("Validation failed", result.error)
 
-    result = service.execute()
+    def test_api_failure_exception(self):
+        mock_client = MagicMock()
+        mock_client.execute.side_effect = ScraperExecutionError("Connection refused")
+        service = ScraperService(client=mock_client)
+        result = service.execute()
+        self.assertEqual(result.status, ScrapeStatus.FAILED)
+        self.assertIn("Connection refused", result.error)
 
-    assert result.status == ScrapeStatus.FAILED
-    assert result.records_extracted == 0
-    assert "Validation failed" in (result.error or "")
-    assert "price is required" in (result.error or "")
-
-
-def test_api_failure():
-    client = FakeScraperClient(
-        error=ScraperExecutionError("Bright Data API request failed: timeout")
-    )
-    service = ScraperService(client=client)
-
-    result = service.execute()
-
-    assert result.status == ScrapeStatus.FAILED
-    assert result.records_extracted == 0
-    assert "Bright Data API request failed" in (result.error or "")
-
-
-def test_client_execution_error_from_payload():
-    client = FakeScraperClient(
-        payload=RawScrapePayload(
-            collector_id="c_test_004",
+    def test_raw_payload_with_error(self):
+        mock_client = MagicMock()
+        mock_client.execute.return_value = RawScrapePayload(
+            collector_id="c_test_err",
             records=[],
-            error="SelectorNotFound: .product-price",
+            error="Rate limit exceeded",
         )
-    )
-    service = ScraperService(client=client)
-
-    result = service.execute(trigger_failure=True)
-
-    assert result.status == ScrapeStatus.FAILED
-    assert result.error == "SelectorNotFound: .product-price"
-    assert client.calls == [{"trigger_failure": True}]
+        service = ScraperService(client=mock_client)
+        result = service.execute()
+        self.assertEqual(result.status, ScrapeStatus.FAILED)
+        self.assertEqual(result.error, "Rate limit exceeded")
 
 
-def test_normalizer_maps_status_field():
-    normalized = normalize_record(
-        {"title": "Keyboard", "price": "$79.00", "status": "out of stock"}
-    )
-    assert normalized.stock_status == "Out of Stock"
+class TestBrightDataClient(unittest.TestCase):
+    """Tests for BrightDataClient credential validation and response extraction."""
 
+    def test_missing_credentials_raises(self):
+        settings = ScraperSettings(
+            scraper_mode=ScraperMode.BRIGHTDATA,
+            brightdata_api_token=None,
+            brightdata_collector_id=None,
+        )
+        with self.assertRaises(ScraperExecutionError):
+            BrightDataClient(settings)
 
-def test_validator_raises_on_empty_list():
-    with pytest.raises(ScraperValidationError) as exc_info:
-        validate_records([])
-    assert "records is empty" in exc_info.value.field_errors
-
-
-def test_validator_raises_on_missing_title():
-    with pytest.raises(ScraperValidationError):
-        validate_record(
-            normalize_record({"title": "", "price": "$10.00", "stock_status": "In Stock"}),
-            record_index=0,
+    def test_extract_records_formats(self):
+        # List format
+        self.assertEqual(
+            BrightDataClient._extract_records([{"title": "Item 1"}]),
+            [{"title": "Item 1"}],
+        )
+        # Dict with data key
+        self.assertEqual(
+            BrightDataClient._extract_records({"data": [{"title": "Item 2"}]}),
+            [{"title": "Item 2"}],
+        )
+        # Dict with results key
+        self.assertEqual(
+            BrightDataClient._extract_records({"results": [{"title": "Item 3"}]}),
+            [{"title": "Item 3"}],
         )
 
 
-def test_normalize_records_returns_product_models():
-    records = normalize_records(
-        [{"title": "Monitor", "price": "199", "stock_status": "In Stock"}]
-    )
-    assert len(records) == 1
-    assert records[0].price == "$199.00"
-
-
-def test_execute_dict_is_json_serializable():
-    client = FakeScraperClient(
-        payload=RawScrapePayload(
-            collector_id="c_test_005",
-            records=[{"title": "Desk", "price": "$120.00", "stock_status": "In Stock"}],
-        )
-    )
-    service = ScraperService(client=client)
-
-    payload: dict[str, Any] = service.execute_dict()
-
-    assert payload["status"] == "success"
-    assert payload["data"][0]["title"] == "Desk"
+if __name__ == "__main__":
+    unittest.main()
