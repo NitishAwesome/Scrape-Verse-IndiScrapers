@@ -14,6 +14,7 @@ class FailureType(str, Enum):
     VALIDATION_ERROR = "ValidationError"
     EMPTY_RESPONSE = "EmptyResponse"
     API_ERROR = "ApiError"
+    INVALID_VALUE = "InvalidValue"
     UNKNOWN = "Unknown"
 
 
@@ -23,6 +24,22 @@ class HealingStatus(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
     IN_PROGRESS = "in_progress"
+
+
+class DOMCandidate(BaseModel):
+    """Represents a candidate HTML element identified during DOM analysis."""
+
+    tag: str = Field(description="HTML tag name, e.g. 'p', 'span', 'h2'")
+    classes: list[str] = Field(default_factory=list, description="CSS classes on element")
+    element_id: str | None = Field(default=None, description="id attribute if present")
+    attributes: dict[str, str] = Field(default_factory=dict, description="HTML element attributes")
+    text: str = Field(default="", description="Inner text content of element")
+    suggested_selector: str = Field(description="Calculated CSS selector targeting this candidate")
+    field_hint: str | None = Field(default=None, description="Inferred target field (e.g. 'price')")
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
 
 
 class ScrapeFailure(BaseModel):
@@ -51,6 +68,10 @@ class ScrapeFailure(BaseModel):
         description="UTC timestamp when failure was detected",
     )
 
+    @property
+    def target_field(self) -> str | None:
+        return self.field
+
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
 
@@ -76,6 +97,14 @@ class SelectorRepair(BaseModel):
         description="Explanation for why this new selector was chosen",
     )
 
+    @property
+    def target_field(self) -> str:
+        return self.field
+
+    @property
+    def reason(self) -> str | None:
+        return self.reasoning
+
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
 
@@ -91,6 +120,7 @@ class HealingEvent(BaseModel):
     failure_type: str = Field(default=FailureType.SELECTOR_NOT_FOUND.value)
     old_selector: str | None = None
     new_selector: str | None = None
+    target_field: str | None = None
     confidence: float | None = None
     validation_result: bool | str | None = Field(
         default=None,
@@ -101,6 +131,7 @@ class HealingEvent(BaseModel):
         default=HealingStatus.SUCCESS.value,
         description="Outcome of this attempt ('success', 'failed', 'in_progress')",
     )
+    message: str | None = Field(default=None, description="Status/diagnostic message")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="UTC timestamp of the healing attempt",
