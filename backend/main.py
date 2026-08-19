@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI
 
+from backend.automation.router import router as healing_router
 from backend.scraper.service import ScraperService
 
 logging.basicConfig(
@@ -10,6 +11,8 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="ScrapeVerse Backend Engine")
+app.include_router(healing_router)
+
 scraper_service = ScraperService()
 
 

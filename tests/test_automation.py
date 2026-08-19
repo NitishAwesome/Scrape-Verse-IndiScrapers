@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 # Ensure root path is accessible for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from fastapi.testclient import TestClient
+
 from backend.automation import (
     DOMAnalyzer,
     FailureDetector,
@@ -19,6 +21,7 @@ from backend.automation import (
     SelectorRepair,
     SelectorRepairEngine,
 )
+from backend.main import app
 from backend.scraper.models import ProductRecord, ScrapeResult, ScrapeStatus
 
 
@@ -244,7 +247,6 @@ class TestHealingManager(unittest.TestCase):
 
     def test_healing_manager_maximum_retry_protection(self):
         """8. Healing manager maximum retry protection (bounded retries)."""
-        # Simulated runner that continually fails
         always_failing_runner = MagicMock(
             return_value={
                 "collector_id": "c_broken",
@@ -267,6 +269,44 @@ class TestHealingManager(unittest.TestCase):
         self.assertFalse(result.repaired)
         self.assertEqual(len(result.attempts), 2)
         self.assertIn("Exhausted maximum retry limit", result.error)
+
+
+class TestHealingRouter(unittest.TestCase):
+    """Tests for FastAPI endpoints mounted from healing_router."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    def test_get_healing_status_endpoint(self):
+        response = self.client.get("/api/healing/status")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body.get("status"), "online")
+        self.assertEqual(body.get("module"), "self-healing")
+        self.assertIn("SelectorNotFound", body.get("supported_failure_types", []))
+
+    def test_post_healing_test_endpoint(self):
+        response = self.client.post("/api/healing/test")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body.get("status"), "success")
+        self.assertTrue(body.get("repaired"))
+        self.assertEqual(body.get("failure_type"), "SelectorNotFound")
+        self.assertEqual(body.get("old_selector"), ".product-price")
+        self.assertEqual(body.get("new_selector"), ".product-price")
+        self.assertGreaterEqual(body.get("confidence"), 0.5)
+        self.assertTrue(body.get("validation_result"))
+        self.assertIn("healing_event", body)
+        self.assertIn("healing_result", body)
+
+    def test_existing_endpoints_unaffected(self):
+        root_resp = self.client.get("/")
+        self.assertEqual(root_resp.status_code, 200)
+        self.assertEqual(root_resp.json().get("status"), "online")
+
+        scrape_resp = self.client.get("/api/scrape")
+        self.assertEqual(scrape_resp.status_code, 200)
+        self.assertEqual(scrape_resp.json().get("status"), "success")
 
 
 if __name__ == "__main__":
