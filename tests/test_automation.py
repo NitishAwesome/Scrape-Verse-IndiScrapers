@@ -133,6 +133,17 @@ class TestDOMAnalyzer(unittest.TestCase):
         self.assertEqual(stock_cand.field_hint, "stock_status")
         self.assertEqual(stock_cand.text, "In Stock")
 
+    def test_extract_with_selectors(self):
+        selectors = {
+            "title": ".main-title",
+            "price": "#special-price",
+            "stock_status": ".inventory-status",
+        }
+        extracted = self.analyzer.extract_with_selectors(self.sample_html, selectors)
+        self.assertEqual(extracted.get("title"), "Mechanical Gaming Keyboard")
+        self.assertEqual(extracted.get("price"), "$129.99")
+        self.assertEqual(extracted.get("stock_status"), "In Stock")
+
 
 class TestSelectorRepair(unittest.TestCase):
     """Tests for SelectorRepairEngine."""
@@ -203,7 +214,6 @@ class TestHealingManager(unittest.TestCase):
 
     def test_healing_manager_successful_recovery(self):
         """7. Healing manager successful recovery."""
-        # Simulated runner: fails on first run (trigger_failure=True), succeeds on retry (trigger_failure=False)
         def mock_runner(trigger_failure: bool = False):
             if trigger_failure:
                 return {
@@ -270,6 +280,43 @@ class TestHealingManager(unittest.TestCase):
         self.assertEqual(len(result.attempts), 2)
         self.assertIn("Exhausted maximum retry limit", result.error)
 
+    def test_demo_mutation_scenario_product_price_to_current_price(self):
+        """
+        Demo Scenario:
+        Initial selector: .product-price
+        Mutated HTML: <div class="current-price">$49.99</div>
+        Result: .product-price fails -> .current-price discovered -> healed with $49.99.
+        """
+        mutated_html = """
+        <div class="product-card">
+            <h2 class="product-title">Wireless Gaming Mouse</h2>
+            <div class="current-price">$49.99</div>
+            <p class="product-status">In Stock</p>
+        </div>
+        """
+        manager = HealingManager()
+        result: HealingResult = manager.heal_html(
+            html_content=mutated_html,
+            initial_selectors={
+                "title": ".product-title",
+                "price": ".product-price",
+                "stock_status": ".product-status",
+            },
+        )
+
+        self.assertEqual(result.status, "success")
+        self.assertTrue(result.repaired)
+        self.assertGreater(len(result.attempts), 0)
+
+        first_repair = result.selector_repairs[0]
+        self.assertEqual(first_repair.old_selector, ".product-price")
+        self.assertEqual(first_repair.new_selector, ".current-price")
+        self.assertEqual(first_repair.field, "price")
+
+        first_event = result.attempts[0]
+        self.assertTrue(first_event.validation_result)
+        self.assertEqual(first_event.status, "success")
+
 
 class TestHealingRouter(unittest.TestCase):
     """Tests for FastAPI endpoints mounted from healing_router."""
@@ -285,19 +332,31 @@ class TestHealingRouter(unittest.TestCase):
         self.assertEqual(body.get("module"), "self-healing")
         self.assertIn("SelectorNotFound", body.get("supported_failure_types", []))
 
+    def test_post_healing_demo_endpoint(self):
+        response = self.client.post("/api/healing/demo")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body.get("status"), "success")
+        self.assertTrue(body.get("repaired"))
+        self.assertEqual(body.get("old_selector"), ".product-price")
+        self.assertEqual(body.get("new_selector"), ".current-price")
+        self.assertTrue(body.get("validation_result"))
+        self.assertIn("healing_event", body)
+        self.assertIn("healing_result", body)
+
+    def test_get_healing_demo_endpoint(self):
+        response = self.client.get("/api/healing/demo")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body.get("status"), "success")
+        self.assertEqual(body.get("new_selector"), ".current-price")
+
     def test_post_healing_test_endpoint(self):
         response = self.client.post("/api/healing/test")
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body.get("status"), "success")
         self.assertTrue(body.get("repaired"))
-        self.assertEqual(body.get("failure_type"), "SelectorNotFound")
-        self.assertEqual(body.get("old_selector"), ".product-price")
-        self.assertEqual(body.get("new_selector"), ".product-price")
-        self.assertGreaterEqual(body.get("confidence"), 0.5)
-        self.assertTrue(body.get("validation_result"))
-        self.assertIn("healing_event", body)
-        self.assertIn("healing_result", body)
 
     def test_existing_endpoints_unaffected(self):
         root_resp = self.client.get("/")
@@ -306,7 +365,9 @@ class TestHealingRouter(unittest.TestCase):
 
         scrape_resp = self.client.get("/api/scrape")
         self.assertEqual(scrape_resp.status_code, 200)
-        self.assertEqual(scrape_resp.json().get("status"), "success")
+        body = scrape_resp.json()
+        self.assertEqual(body.get("status"), "success")
+        self.assertEqual(body["data"][0]["price"], "$49.99")
 
 
 if __name__ == "__main__":

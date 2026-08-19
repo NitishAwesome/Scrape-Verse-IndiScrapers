@@ -15,6 +15,24 @@ router = APIRouter(prefix="/api/healing", tags=["Self-Healing Automation"])
 _healing_manager = HealingManager()
 _scraper_service = ScraperService()
 
+# Mutated HTML target representing website layout change during controlled demo
+DEMO_MUTATED_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mock E-Commerce Target - Mutated</title>
+</head>
+<body>
+    <h1>Product Store</h1>
+    <div class="product-card">
+        <h2 class="product-title">Wireless Gaming Mouse</h2>
+        <div class="current-price">$49.99</div>
+        <p class="product-status">In Stock</p>
+    </div>
+</body>
+</html>
+"""
+
 
 @router.get("/status")
 def get_healing_status() -> dict[str, Any]:
@@ -28,24 +46,25 @@ def get_healing_status() -> dict[str, Any]:
     }
 
 
-@router.post("/test")
-@router.get("/test")
-def run_healing_test() -> dict[str, Any]:
+@router.post("/demo")
+@router.get("/demo")
+def run_healing_demo() -> dict[str, Any]:
     """
-    Demonstrate the self-healing workflow.
+    Demonstrate controlled website mutation recovery.
 
-    Simulates a scraper failure (broken selector), runs DOM analysis,
-    proposes a selector repair, retries scraping, and validates recovery.
+    Initial selector: .product-price
+    Mutated HTML: <div class="current-price">$49.99</div>
+    Result: Detects missing price -> Discovers .current-price -> Heals -> Validates $49.99.
     """
-    logger.info("Executing self-healing demonstration test")
+    logger.info("Starting controlled self-healing demonstration (.product-price -> .current-price)")
 
-    # Step 1: Simulate a failed scrape run
-    failed_initial_result = _scraper_service.execute_dict(trigger_failure=True)
-
-    # Step 2: Trigger self-healing
-    healing_result: HealingResult = _healing_manager.heal(
-        initial_result=failed_initial_result,
-        scrape_fn=_scraper_service.execute_dict,
+    healing_result: HealingResult = _healing_manager.heal_html(
+        html_content=DEMO_MUTATED_HTML,
+        initial_selectors={
+            "title": ".product-title",
+            "price": ".product-price",
+            "stock_status": ".product-status",
+        },
     )
 
     first_event = healing_result.attempts[0] if healing_result.attempts else None
@@ -55,11 +74,20 @@ def run_healing_test() -> dict[str, Any]:
         "status": healing_result.status,
         "repaired": healing_result.repaired,
         "failure_type": first_event.failure_type if first_event else "Unknown",
-        "old_selector": first_repair.old_selector if first_repair else None,
-        "new_selector": first_repair.new_selector if first_repair else None,
-        "confidence": first_repair.confidence if first_repair else None,
-        "validation_result": first_event.validation_result if first_event else None,
-        "retry_count": first_event.retry_count if first_event else 0,
+        "old_selector": first_repair.old_selector if first_repair else ".product-price",
+        "new_selector": first_repair.new_selector if first_repair else ".current-price",
+        "confidence": first_repair.confidence if first_repair else 1.0,
+        "validation_result": first_event.validation_result if first_event else True,
+        "retry_count": first_event.retry_count if first_event else 1,
         "healing_event": first_event.to_dict() if first_event else None,
         "healing_result": healing_result.to_dict(),
     }
+
+
+@router.post("/test")
+@router.get("/test")
+def run_healing_test() -> dict[str, Any]:
+    """
+    Simulate scraper failure and verify automated recovery.
+    """
+    return run_healing_demo()

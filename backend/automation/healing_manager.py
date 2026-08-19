@@ -17,9 +17,11 @@ from backend.automation.selector_repair import SelectorRepairEngine
 from backend.automation.validator import HealingValidator
 from backend.scraper.config import get_settings
 from backend.scraper.models import ScrapeResult
+from backend.scraper.normalizer import normalize_record
 from backend.scraper.service import ScraperService
 
 logger = logging.getLogger(__name__)
+
 
 
 class HealingManager:
@@ -188,3 +190,112 @@ class HealingManager:
             "<p class='product-status'>In Stock</p>"
             "</body></html>"
         )
+
+    def heal_html(
+        self,
+        html_content: str,
+        initial_selectors: dict[str, str] | None = None,
+        scraper_id: str = "c_mock_123456",
+    ) -> HealingResult:
+        """
+        Execute self-healing specifically on an HTML DOM string.
+
+        Used for demonstration scenarios where the DOM mutates (e.g. .product-price -> .current-price).
+        """
+        active_selectors = dict(
+            initial_selectors
+            or {
+                "title": ".product-title",
+                "price": ".product-price",
+                "stock_status": ".product-status",
+            }
+        )
+
+        def extract_run(selectors: dict[str, str]) -> dict[str, Any]:
+            raw_fields = self.dom_analyzer.extract_with_selectors(html_content, selectors)
+            normalized = normalize_record(raw_fields)
+            is_empty = not any(v for v in raw_fields.values())
+            return {
+                "collector_id": scraper_id,
+                "status": "success" if not is_empty else "failed",
+                "records_extracted": 1 if not is_empty else 0,
+                "data": [normalized.model_dump()] if not is_empty else [],
+                "error": None if not is_empty else "Extracted 0 records",
+            }
+
+        # Step 1: Run initial extraction with initial selectors
+        initial_result = extract_run(active_selectors)
+        failure = self.failure_detector.detect(initial_result)
+
+        if not failure:
+            logger.info("Initial extraction on HTML was already healthy.")
+            return HealingResult(
+                status=HealingStatus.SUCCESS.value,
+                repaired=True,
+                attempts=[],
+                selector_repairs=[],
+                error=None,
+            )
+
+        applied_repairs: list[SelectorRepair] = []
+        events: list[HealingEvent] = []
+
+        for attempt in range(1, self.max_retries + 1):
+            target_field = failure.field or "price"
+            dom_candidates = self.dom_analyzer.analyze(html_content, target_field=target_field)
+
+            repair = self.repair_engine.propose_repair(
+                field=target_field,
+                old_selector=failure.old_selector or active_selectors.get(target_field),
+                candidates=dom_candidates,
+            )
+            applied_repairs.append(repair)
+
+            # Apply repair to active selectors
+            active_selectors[target_field] = repair.new_selector
+
+            # Retry extraction with updated selector
+            retry_result = extract_run(active_selectors)
+            is_valid, validation_msg = self.validator.validate(retry_result, target_field=target_field)
+
+            event = HealingEvent(
+                scraper_id=scraper_id,
+                failure_type=failure.failure_type,
+                old_selector=repair.old_selector,
+                new_selector=repair.new_selector,
+                target_field=repair.field,
+                confidence=repair.confidence,
+                validation_result=is_valid,
+                retry_count=attempt,
+                status=HealingStatus.SUCCESS.value if is_valid else HealingStatus.FAILED.value,
+                message=validation_msg,
+            )
+            events.append(event)
+
+            if is_valid:
+                logger.info(
+                    "Self-healing HTML extraction SUCCEEDED on attempt %d: %s -> %s",
+                    attempt,
+                    repair.old_selector,
+                    repair.new_selector,
+                )
+                return HealingResult(
+                    status=HealingStatus.SUCCESS.value,
+                    repaired=True,
+                    attempts=events,
+                    selector_repairs=applied_repairs,
+                    error=None,
+                )
+
+            next_failure = self.failure_detector.detect(retry_result)
+            if next_failure:
+                failure = next_failure
+
+        return HealingResult(
+            status=HealingStatus.FAILED.value,
+            repaired=False,
+            attempts=events,
+            selector_repairs=applied_repairs,
+            error=f"Exhausted maximum retry limit ({self.max_retries} attempts) without passing validation",
+        )
+

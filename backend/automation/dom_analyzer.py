@@ -209,3 +209,68 @@ class DOMAnalyzer:
                 return f"[{key}='{val}']" if val else f"[{key}]"
 
         return tag
+
+    def extract_with_selectors(
+        self,
+        html_content: str,
+        selectors: dict[str, str],
+    ) -> dict[str, str]:
+        """
+        Extract field values from HTML content using a map of field -> CSS selector.
+
+        Supports class (.name), ID (#id), attribute ([attr='val']), and tag selectors.
+        """
+        if not html_content or not html_content.strip():
+            return {field: "" for field in selectors}
+
+        parser = _DOMElementParser()
+        try:
+            parser.feed(html_content)
+        except Exception as exc:
+            logger.error("Failed to parse HTML in extract_with_selectors: %s", exc)
+            return {field: "" for field in selectors}
+
+        extracted: dict[str, str] = {field: "" for field in selectors}
+
+        for field, selector in selectors.items():
+            sel = selector.strip()
+            for elem in parser.elements:
+                text = " ".join(elem["text_parts"]).strip()
+                if not text:
+                    continue
+
+                # Match by class (.class-name)
+                if sel.startswith("."):
+                    target_cls = sel[1:].lower()
+                    if any(c.lower() == target_cls for c in elem["classes"]):
+                        extracted[field] = text
+                        break
+
+                # Match by ID (#element-id)
+                elif sel.startswith("#"):
+                    target_id = sel[1:].lower()
+                    if (elem["element_id"] or "").lower() == target_id:
+                        extracted[field] = text
+                        break
+
+                # Match by tag name
+                elif sel.lower() == elem["tag"]:
+                    extracted[field] = text
+                    break
+
+                # Match by attribute ([attr] or [attr='val'])
+                elif sel.startswith("[") and sel.endswith("]"):
+                    attr_expr = sel[1:-1]
+                    if "=" in attr_expr:
+                        attr_name, attr_val = attr_expr.split("=", 1)
+                        attr_val = attr_val.strip("\"'")
+                        if elem["attributes"].get(attr_name) == attr_val:
+                            extracted[field] = text
+                            break
+                    else:
+                        if attr_expr in elem["attributes"]:
+                            extracted[field] = text
+                            break
+
+        return extracted
+
