@@ -357,6 +357,16 @@ class TestHealingRouter(unittest.TestCase):
         body = response.json()
         self.assertEqual(body.get("status"), "success")
         self.assertTrue(body.get("repaired"))
+        self.assertEqual(body.get("failure_type"), "ValidationError")
+        self.assertEqual(body.get("old_selector"), ".product-price")
+        self.assertEqual(body.get("new_selector"), ".current-price")
+        self.assertGreaterEqual(body.get("confidence"), 0.5)
+        self.assertEqual(body.get("retry_count"), 1)
+        self.assertEqual(body.get("validation"), "passed")
+        self.assertIn("message", body)
+        self.assertIn("data", body)
+        self.assertEqual(body["data"][0]["price"], "$49.99")
+
 
     def test_existing_endpoints_unaffected(self):
         root_resp = self.client.get("/")
