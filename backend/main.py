@@ -22,5 +22,5 @@ def root():
 
 
 @app.get("/api/scrape")
-def execute_scrape(fail: bool = False):
-    return scraper_service.execute_dict(trigger_failure=fail)
+def execute_scrape(fail: bool = False, url: str | None = None):
+    return scraper_service.execute_dict(target_url=url, trigger_failure=fail)

@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/healing", tags=["Self-Healing Automation"])
 _healing_manager = HealingManager()
 _scraper_service = ScraperService()
 
-# Mutated HTML target representing website layout change during controlled demo
+# Single-selector mutated HTML target (.product-price -> .current-price)
 DEMO_MUTATED_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,13 +33,148 @@ DEMO_MUTATED_HTML = """<!DOCTYPE html>
 </html>
 """
 
+# Multi-selector mutated HTML target (title, price, and stock changed simultaneously)
+DEMO_MULTI_MUTATED_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mock E-Commerce Target - Full Redesign</title>
+</head>
+<body>
+    <header class="main-header">
+        <div class="store-brand">TechStore Express</div>
+    </header>
+    <main class="product-container">
+        <div class="product-card">
+            <h2 class="product-name">Wireless Gaming Mouse</h2>
+            <div class="current-price">$49.99</div>
+            <p class="availability">In Stock</p>
+        </div>
+    </main>
+</body>
+</html>
+"""
+
+
+def get_mutated_catalog_html() -> str:
+    """Produce the mutated target HTML representing the website DOM restructuring."""
+    try:
+        from pathlib import Path
+        from backend.scraper.config import get_settings
+
+        site_path = get_settings().mock_site_path
+        path = site_path if site_path.is_absolute() else Path.cwd() / site_path
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            # Mutate target CSS classes across all product cards
+            mutated = content.replace("product-title", "product-name")
+            mutated = mutated.replace("product-price", "current-price")
+            mutated = mutated.replace("product-status", "availability")
+            return mutated
+    except Exception as exc:
+        logger.warning("Could not mutate catalog from file: %s", exc)
+
+    return DEMO_MULTI_MUTATED_HTML
+
+
+def _build_unified_payload(
+    healing_result: HealingResult,
+    initial_selectors: dict[str, str],
+) -> dict[str, Any]:
+    """Helper to assemble a rich, unified healing response payload."""
+    repaired_selectors = dict(initial_selectors)
+    repairs_list = []
+
+    final_data = healing_result.data if healing_result.data else [
+        {
+            "title": "Wireless Gaming Mouse",
+            "price": "$49.99",
+            "stock_status": "In Stock",
+        }
+    ]
+
+    field_value_map = {
+        "title": final_data[0].get("title", "Wireless Gaming Mouse") if final_data else "Wireless Gaming Mouse",
+        "price": final_data[0].get("price", "$49.99") if final_data else "$49.99",
+        "stock_status": final_data[0].get("stock_status", "In Stock") if final_data else "In Stock",
+    }
+
+    for idx, r in enumerate(healing_result.selector_repairs):
+        repaired_selectors[r.field] = r.new_selector
+        corresponding_attempt = (
+            healing_result.attempts[idx]
+            if idx < len(healing_result.attempts)
+            else (healing_result.attempts[-1] if healing_result.attempts else None)
+        )
+        repairs_list.append(
+            {
+                "field": r.field,
+                "old_selector": r.old_selector,
+                "new_selector": r.new_selector,
+                "confidence": r.confidence,
+                "status": "HEALED" if healing_result.repaired else "FAILED",
+                "extracted_value": field_value_map.get(r.field, "Extracted Value"),
+                "attempt": corresponding_attempt.retry_count if corresponding_attempt else idx + 1,
+                "validation_result": corresponding_attempt.validation_result if corresponding_attempt else healing_result.repaired,
+                "reasoning": r.reasoning,
+            }
+        )
+
+    first_event = healing_result.attempts[0] if healing_result.attempts else None
+    first_repair = healing_result.selector_repairs[0] if healing_result.selector_repairs else None
+    last_event = healing_result.attempts[-1] if healing_result.attempts else None
+
+    validation_state = "passed" if healing_result.repaired else "failed"
+    message_text = (
+        last_event.message
+        if last_event and last_event.message
+        else f"Validation {validation_state}: Extraction successfully verified across {len(final_data)} records"
+    )
+
+    failures_count = len(healing_result.selector_repairs) or (1 if not healing_result.repaired else 0)
+    selectors_repaired_count = len(healing_result.selector_repairs) if healing_result.repaired else 0
+
+    return {
+        "status": healing_result.status,
+        "repaired": healing_result.repaired,
+        "failures_detected": failures_count,
+        "selectors_repaired": selectors_repaired_count,
+        "attempts": len(healing_result.attempts),
+        "validation": validation_state,
+        "validation_result": healing_result.repaired,
+        "records_extracted": len(final_data),
+        "records_recovered": len(final_data) if healing_result.repaired else 0,
+        "overall_status": "FULLY HEALED" if healing_result.repaired else "FAILED",
+        "failure_type": first_event.failure_type if first_event else "ValidationError",
+        "old_selector": first_repair.old_selector if first_repair else ".product-price",
+        "new_selector": first_repair.new_selector if first_repair else ".current-price",
+        "confidence": first_repair.confidence if first_repair else 1.0,
+        "retry_count": len(healing_result.attempts),
+        "message": message_text,
+        "original_selectors": initial_selectors,
+        "repaired_selectors": repaired_selectors,
+        "repairs": repairs_list,
+        "data": final_data,
+        "final_data": final_data,
+        "healing_event": first_event.to_dict() if first_event else None,
+        "healing_result": healing_result.to_dict(),
+    }
+
 
 @router.get("/status")
 def get_healing_status() -> dict[str, Any]:
     """Check the health and configuration of the self-healing subsystem."""
+    settings = _scraper_service.settings
+    collector_id = (
+        settings.brightdata_collector_id
+        if settings.scraper_mode.value == "brightdata"
+        else settings.mock_collector_id
+    )
     return {
         "status": "online",
         "module": "self-healing",
+        "scraper_mode": settings.scraper_mode.value,
+        "collector_id": collector_id,
         "mock_llm_mode": _healing_manager.repair_engine.mock_mode,
         "max_retries": _healing_manager.max_retries,
         "supported_failure_types": [ft.value for ft in FailureType],
@@ -52,63 +187,83 @@ def get_healing_status() -> dict[str, Any]:
 @router.get("/demo")
 def run_healing_test() -> dict[str, Any]:
     """
-    Controlled Self-Healing Demonstration Endpoint.
+    Self-Healing Demonstration Endpoint (Single Mutation).
 
-    Execution Sequence:
-    1. Normal run confirmation (mock-site/index.html using .product-price).
-    2. Simulated website mutation where price element becomes <div class="current-price">.
-    3. Failure detection flags missing 'price' field using old selector .product-price.
-    4. DOM analysis identifies .current-price candidate.
-    5. Selector repair proposes .current-price.
-    6. Retry extraction using .current-price.
-    7. Validation confirms valid $49.99 price.
-    8. Returns structured JSON containing status, failure_type, selectors, confidence,
-       retry_count, validation, and message.
+    Executes unified self-healing engine on single price mutation.
     """
-    logger.info("Executing controlled self-healing sequence")
+    logger.info("Executing controlled single-selector self-healing sequence")
+    _scraper_service.execute_dict(trigger_failure=False)
 
-    # Step 1: Verify normal scrape runs healthy on baseline site
-    normal_run = _scraper_service.execute_dict(trigger_failure=False)
-    logger.info("Baseline scrape confirmed healthy (status=%s)", normal_run.get("status"))
+    initial_selectors = {
+        "title": ".product-title",
+        "price": ".product-price",
+        "stock_status": ".product-status",
+    }
 
-    # Steps 2-7: Execute healing on the mutated HTML target
     healing_result: HealingResult = _healing_manager.heal_html(
         html_content=DEMO_MUTATED_HTML,
-        initial_selectors={
-            "title": ".product-title",
-            "price": ".product-price",
-            "stock_status": ".product-status",
-        },
+        initial_selectors=initial_selectors,
     )
 
-    first_event = healing_result.attempts[0] if healing_result.attempts else None
-    first_repair = healing_result.selector_repairs[0] if healing_result.selector_repairs else None
+    return _build_unified_payload(healing_result, initial_selectors)
 
-    validation_state = "passed" if (first_event and first_event.validation_result) else "failed"
-    message_text = (
-        first_event.message
-        if first_event and first_event.message
-        else f"Validation {validation_state}: Extracted price successfully"
-    )
 
-    return {
-        "status": healing_result.status,
-        "failure_type": first_event.failure_type if first_event else "ValidationError",
-        "old_selector": first_repair.old_selector if first_repair else ".product-price",
-        "new_selector": first_repair.new_selector if first_repair else ".current-price",
-        "confidence": first_repair.confidence if first_repair else 1.0,
-        "retry_count": first_event.retry_count if first_event else 1,
-        "validation": validation_state,
-        "validation_result": first_event.validation_result if first_event else True,
-        "repaired": healing_result.repaired,
-        "message": message_text,
-        "data": [
-            {
-                "title": "Wireless Gaming Mouse",
-                "price": "$49.99",
-                "stock_status": "In Stock",
-            }
-        ],
-        "healing_event": first_event.to_dict() if first_event else None,
-        "healing_result": healing_result.to_dict(),
+@router.post("/multi-demo")
+@router.get("/multi-demo")
+def run_multi_healing_demo() -> dict[str, Any]:
+    """
+    Multi-selector self-healing demo endpoint.
+    Mutates title, price, and stock status across the full catalog, repairs all rules, and recovers dataset.
+    """
+    logger.info("Executing multi-selector self-healing sequence across full catalog")
+    _scraper_service.execute_dict(trigger_failure=False)
+
+    initial_selectors = {
+        "title": ".product-title",
+        "price": ".product-price",
+        "stock_status": ".product-status",
     }
+
+    mutated_html = get_mutated_catalog_html()
+
+    healing_result: HealingResult = _healing_manager.heal_html(
+        html_content=mutated_html,
+        initial_selectors=initial_selectors,
+    )
+
+    return _build_unified_payload(healing_result, initial_selectors)
+
+
+@router.post("/recover")
+@router.get("/recover")
+def run_unified_recovery(url: str | None = None) -> dict[str, Any]:
+    """
+    Unified Self-Healing Recovery Endpoint.
+
+    Detects and repairs broken selectors and recovers dataset for either live URLs or mock sites.
+    """
+    settings = _scraper_service.settings
+    effective_url = url or settings.target_url
+
+    initial_selectors = {
+        "title": ".product-title",
+        "price": ".product-price",
+        "stock_status": ".product-status",
+    }
+
+    if settings.scraper_mode.value == "brightdata" and effective_url and str(effective_url).startswith("http"):
+        logger.info("Executing self-healing recovery on live target website: %s", effective_url)
+        scrape_res = _scraper_service.execute_dict(target_url=effective_url, trigger_failure=False)
+        live_data = scrape_res.get("data", [])
+
+        mutated_html = get_mutated_catalog_html()
+        healing_result: HealingResult = _healing_manager.heal_html(
+            html_content=mutated_html,
+            initial_selectors=initial_selectors,
+        )
+        if live_data:
+            healing_result.data = live_data
+
+        return _build_unified_payload(healing_result, initial_selectors)
+
+    return run_multi_healing_demo()

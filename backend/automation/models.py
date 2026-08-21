@@ -164,6 +164,10 @@ class HealingResult(BaseModel):
         default_factory=list,
         description="All selector repairs applied during healing",
     )
+    data: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Extracted and normalized product dataset recovered by self-healing",
+    )
     error: str | None = Field(
         default=None,
         description="Error details if self-healing could not resolve the issue",

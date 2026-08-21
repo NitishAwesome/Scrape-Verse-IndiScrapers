@@ -41,7 +41,12 @@ class ScraperService:
         self.settings = settings or get_settings()
         self.client = client or create_scraper_client(self.settings)
 
-    def execute(self, *, trigger_failure: bool = False) -> ScrapeResult:
+    def execute(
+        self,
+        *,
+        target_url: str | None = None,
+        trigger_failure: bool = False,
+    ) -> ScrapeResult:
         """
         Run the full scraping pipeline.
 
@@ -50,7 +55,10 @@ class ScraperService:
         collector_id = self._collector_id()
 
         try:
-            raw_payload = self.client.execute(trigger_failure=trigger_failure)
+            raw_payload = self.client.execute(
+                target_url=target_url,
+                trigger_failure=trigger_failure,
+            )
         except ScraperExecutionError as exc:
             logger.error("Scraper execution failed: %s", exc)
             return ScrapeResult(
@@ -111,9 +119,17 @@ class ScraperService:
             data=normalized,
         )
 
-    def execute_dict(self, *, trigger_failure: bool = False) -> dict:
+    def execute_dict(
+        self,
+        *,
+        target_url: str | None = None,
+        trigger_failure: bool = False,
+    ) -> dict:
         """Convenience wrapper returning a JSON-serializable dictionary."""
-        return self.execute(trigger_failure=trigger_failure).to_dict()
+        return self.execute(
+            target_url=target_url,
+            trigger_failure=trigger_failure,
+        ).to_dict()
 
     def _collector_id(self) -> str:
         if self.settings.scraper_mode == ScraperMode.BRIGHTDATA:
@@ -121,6 +137,15 @@ class ScraperService:
         return self.settings.mock_collector_id
 
 
-def run_scrape(*, trigger_failure: bool = False) -> ScrapeResult:
-    """Module-level helper for Person 2 when a class instance is not needed."""
-    return ScraperService().execute(trigger_failure=trigger_failure)
+def run_scrape(
+    *,
+    target_url: str | None = None,
+    trigger_failure: bool = False,
+    fail: bool = False,
+) -> dict:
+    """Module-level helper returning dictionary result."""
+    should_fail = trigger_failure or fail
+    return ScraperService().execute_dict(
+        target_url=target_url,
+        trigger_failure=should_fail,
+    )

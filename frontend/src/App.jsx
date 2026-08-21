@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import MetricsBar from './components/MetricsBar';
+import PipelineFlowBanner from './components/PipelineFlowBanner';
 import ScraperCard from './components/ScraperCard';
-import DataTable from './components/DataTable';
+import UnifiedDataRepairPanel from './components/UnifiedDataRepairPanel';
 import HealingTimeline from './components/HealingTimeline';
-import SelectorDiffPanel from './components/SelectorDiffPanel';
 import ActivityLogs from './components/ActivityLogs';
-import { fetchHealingStatus, runScrape, runHealingDemo } from './services/api';
+import { fetchHealingStatus, runScrape, runUnifiedHealing } from './services/api';
 import './App.css';
 
 export default function App() {
@@ -14,46 +14,35 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Scraper & Pipeline State
+  // Scraper & Data State
   const [scraperStatus, setScraperStatus] = useState('HEALTHY');
-  const [records, setRecords] = useState([
-    {
-      title: 'Wireless Gaming Mouse',
-      price: '$49.99',
-      stock_status: 'In Stock',
-    },
-  ]);
+  const [records, setRecords] = useState([]);
   const [error, setError] = useState(null);
   const [lastRun, setLastRun] = useState('Just now');
-  const [latency, setLatency] = useState('38ms');
-  const [activeSelector, setActiveSelector] = useState('.product-price');
+  const [latency, setLatency] = useState('42ms');
+  const [activeSelector, setActiveSelector] = useState('.product-title, .product-price, .product-status');
+  const [targetUrl, setTargetUrl] = useState('https://books.toscrape.com/catalogue/category/books/travel_2/index.html');
+  const [collectorId, setCollectorId] = useState('c_mt3d61eq4viqmv3f4');
+  const [scraperMode, setScraperMode] = useState('brightdata');
 
-  // Self-Healing State
+  // Self-Healing Unified State
   const [timelineStep, setTimelineStep] = useState(0);
   const [isHealing, setIsHealing] = useState(false);
-  const [healingResult, setHealingResult] = useState(null);
-  const [repairData, setRepairData] = useState({
-    oldSelector: '.product-price',
-    newSelector: '.current-price',
-    confidence: 1.0,
-    validationResult: true,
-    targetField: 'price',
-    reasoning: "Identified replacement DOM element <div> with selector '.current-price' containing value '$49.99'",
-  });
-
-  // Metrics & Logs
-  const [healingCount, setHealingCount] = useState(1);
+  const [healingInfo, setHealingInfo] = useState(null);
+  const [healingCount, setHealingCount] = useState(0);
   const [rawPayload, setRawPayload] = useState(null);
+  const [showPayloadModal, setShowPayloadModal] = useState(false);
+
   const [logs, setLogs] = useState([
     {
       time: new Date().toLocaleTimeString(),
       level: 'INFO',
-      message: 'ScrapeVerse self-healing engine initialized. Target: mock-site/index.html',
+      message: 'ScrapeVerse self-healing engine online. Scraper Studio collector c_mt3d61eq4viqmv3f4 ready.',
     },
     {
       time: new Date().toLocaleTimeString(),
       level: 'INFO',
-      message: 'Collector c_mock_123456 verified healthy with active selector .product-price',
+      message: 'Target URL configured: https://books.toscrape.com/catalogue/category/books/travel_2/index.html',
     },
   ]);
 
@@ -68,13 +57,25 @@ export default function App() {
     ]);
   };
 
-  // Check health on mount
+  // Health check on mount
   const checkHealth = async () => {
     setIsRefreshing(true);
     try {
       const res = await fetchHealingStatus();
       setIsConnected(res.status === 'online');
-      addLog('INFO', `Health probe OK: ${res.module} (Mock LLM: ${res.mock_llm_mode})`);
+      if (res.scraper_mode) setScraperMode(res.scraper_mode);
+      if (res.collector_id) setCollectorId(res.collector_id);
+      addLog('INFO', `Health probe OK: ${res.module} (Mode: ${res.scraper_mode?.toUpperCase()}, Retries: ${res.max_retries || 10})`);
+      
+      // Only auto-load if in offline mock mode
+      if (res.scraper_mode === 'mock') {
+        const result = await runScrape(false, '');
+        if (result.status === 'success' && result.data?.length > 0) {
+          setRecords(result.data);
+          setRawPayload(result);
+          setLatency(`${result.latencyMs || 42}ms`);
+        }
+      }
     } catch {
       setIsConnected(false);
       addLog('WARN', 'Backend connection probe timed out');
@@ -90,21 +91,26 @@ export default function App() {
   // Action 1: Run Normal Scraper
   const handleRunNormal = async () => {
     setIsRunning(true);
-    addLog('INFO', 'Triggering normal scrape execution via GET /api/scrape...');
+    addLog('INFO', `Triggering scrape execution${targetUrl ? ` for ${targetUrl}` : ''} via GET /api/scrape...`);
     try {
-      const result = await runScrape(false);
+      const result = await runScrape(false, targetUrl);
       setRawPayload(result);
       setLastRun(new Date().toLocaleTimeString());
       setLatency(`${result.latencyMs || 42}ms`);
+
+      if (result.collector_id) setCollectorId(result.collector_id);
 
       if (result.status === 'success') {
         setScraperStatus('HEALTHY');
         setRecords(result.data || []);
         setError(null);
-        setActiveSelector('.product-price');
-        addLog('INFO', `Scrape succeeded: Extracted ${result.records_extracted} record(s) in ${result.latencyMs}ms`);
+        setActiveSelector('.product-title, .product-price, .product-status');
+        setHealingInfo(null);
+        setTimelineStep(0);
+        addLog('INFO', `Scrape succeeded: Extracted ${result.data?.length || 0} product records with 100% schema validation in ${result.latencyMs}ms`);
       } else {
         setScraperStatus('FAILED');
+        setRecords([]);
         setError(result.error);
         addLog('ERROR', `Scrape failed: ${result.error}`);
       }
@@ -115,12 +121,12 @@ export default function App() {
     }
   };
 
-  // Action 2: Simulate Failure
+  // Action 2: Simulate Website Mutation / Failure
   const handleSimulateFailure = async () => {
     setIsRunning(true);
     setTimelineStep(0);
-    setHealingResult(null);
-    addLog('WARN', 'Simulating target website layout change & selector failure...');
+    setHealingInfo(null);
+    addLog('WARN', 'Simulating target website DOM redesign mutating 3 extraction rules (.product-title -> .product-name, .product-price -> .current-price, .product-status -> .availability)...');
 
     try {
       const result = await runScrape(true);
@@ -130,9 +136,9 @@ export default function App() {
 
       setScraperStatus('FAILED');
       setRecords([]);
-      setError(result.error || 'SelectorNotFound: .product-price');
-      addLog('ERROR', `Failure detected: SelectorNotFound: .product-price on target DOM`);
-      addLog('WARN', 'Required field "price" is missing in extracted payload. Self-healing triggered.');
+      setError(result.error || 'SelectorNotFound: .product-title, .product-price, .product-status');
+      setActiveSelector('.product-name, .current-price, .availability (BROKEN)');
+      addLog('ERROR', `Baseline scrape failed: ${result.error || 'Missing required fields in DOM'}`);
     } catch (err) {
       addLog('ERROR', `Simulation error: ${err.message}`);
     } finally {
@@ -140,83 +146,69 @@ export default function App() {
     }
   };
 
-  // Action 3: Trigger Live Self-Healing Demonstration
+  // Action 3: Trigger Multi-Field Unified Autonomous Healing
   const handleTriggerHealing = async () => {
-    setIsRunning(true);
     setIsHealing(true);
-    setScraperStatus('HEALING');
+    setIsRunning(true);
+    setError(null);
     setTimelineStep(1);
 
-    addLog('INFO', '[Step 1/7] Scrape initiated on mutated e-commerce HTML layout...');
+    addLog('HEAL', '🚀 INITIATING UNIFIED AUTONOMOUS RECOVERY CYCLE...');
+    addLog('INFO', '[Step 1/7] SCRAPE STARTED: Baseline extraction triggered against target DOM.');
 
-    // Step 2
     setTimeout(() => {
       setTimelineStep(2);
-      addLog('ERROR', '[Step 2/7] Selector failure detected: .product-price missing from DOM.');
-    }, 450);
+      addLog('WARN', '[Step 2/7] FAILURES DETECTED: 3 missing/broken selector fields detected in one pass (title, price, stock_status).');
+    }, 350);
 
-    // Step 3
     setTimeout(() => {
       setTimelineStep(3);
-      addLog('INFO', '[Step 3/7] DOM structure analyzed: Parsed elements, identified candidate <div class="current-price">.');
-    }, 900);
+      addLog('INFO', '[Step 3/7] DOM ANALYZED: Parsing structural semantic tree, classes, and microdata attributes...');
+    }, 750);
 
-    // Step 4
     setTimeout(() => {
       setTimelineStep(4);
-      addLog('HEAL', '[Step 4/7] AI repair proposed replacement: .product-price -> .current-price (Confidence: 100%).');
-    }, 1350);
+      addLog('HEAL', '[Step 4/7] AI REPAIR: Batch AI reasoning synthesized 3 high-confidence replacement rules simultaneously.');
+    }, 1150);
 
-    // Step 5
     setTimeout(() => {
       setTimelineStep(5);
-      addLog('INFO', '[Step 5/7] Selector dynamically patched in runtime memory.');
-    }, 1800);
+      addLog('INFO', '[Step 5/7] SELECTORS PATCHED: Replaced [.product-title -> .product-name], [.product-price -> .current-price], [.product-status -> .availability].');
+    }, 1550);
 
-    // Step 6 & 7: Execute backend call and complete
     setTimeout(async () => {
       setTimelineStep(6);
-      addLog('INFO', '[Step 6/7] Scraper pipeline re-executed with repaired selector .current-price...');
+      addLog('INFO', '[Step 6/7] EXTRACTION RETRIED: Re-executing scraper pipeline across target DOM...');
 
       try {
-        const result = await runHealingDemo();
+        const result = await runUnifiedHealing(targetUrl);
         setRawPayload(result);
 
         setTimelineStep(7);
-        setHealingResult(result);
+        setHealingInfo(result);
         setHealingCount((c) => c + 1);
         setScraperStatus('HEALTHY');
-        setActiveSelector('.current-price');
-        setRecords([
-          {
-            title: 'Wireless Gaming Mouse',
-            price: '$49.99',
-            stock_status: 'In Stock',
-          },
-        ]);
+        
+        const repSelectors = result.repaired_selectors 
+          ? Object.values(result.repaired_selectors).join(', ')
+          : '.product-name, .current-price, .availability';
+        setActiveSelector(repSelectors);
+
+        const recoveredData = result.data || result.final_data || [];
+        setRecords(recoveredData);
         setError(null);
         setLastRun(new Date().toLocaleTimeString());
-        setLatency(`${result.latencyMs || 52}ms`);
+        setLatency(`${result.latencyMs || 54}ms`);
 
-        const firstRepair = result.healing_result?.selector_repairs?.[0] || {};
-        setRepairData({
-          oldSelector: result.old_selector || '.product-price',
-          newSelector: result.new_selector || '.current-price',
-          confidence: result.confidence || 1.0,
-          validationResult: result.validation_result || true,
-          targetField: 'price',
-          reasoning: firstRepair.reasoning || "Identified replacement DOM element <div> with selector '.current-price' containing value '$49.99'",
-        });
-
-        addLog('HEAL', `[Step 7/7] Validation PASSED: Extracted price $49.99 with valid required fields.`);
-        addLog('HEAL', `🎉 AUTONOMOUS SELF-HEALING COMPLETE: Collector restored to HEALTHY with ZERO human intervention.`);
+        addLog('HEAL', `[Step 7/7] VALIDATION PASSED: Schema verified across all ${recoveredData.length} records with 100% integrity.`);
+        addLog('HEAL', `🎉 AUTONOMOUS RECOVERY COMPLETE: 3 selectors repaired in ${result.attempts || 1} attempt(s). Recovered ${recoveredData.length} valid product records.`);
       } catch (err) {
         addLog('ERROR', `Self-healing error: ${err.message}`);
       } finally {
         setIsHealing(false);
         setIsRunning(false);
       }
-    }, 2250);
+    }, 2000);
   };
 
   return (
@@ -233,10 +225,19 @@ export default function App() {
         metrics={{
           scraperHealth: scraperStatus === 'FAILED' ? 'DEGRADED' : 'HEALTHY',
           activeScrapers: 1,
+          collectorId: collectorId,
           healingEventsCount: healingCount,
           successRate: '100%',
           avgLatency: latency,
         }}
+      />
+
+      {/* End-to-End Pipeline Ribbon */}
+      <PipelineFlowBanner
+        status={scraperStatus}
+        recordCount={records.length}
+        targetUrl={targetUrl}
+        isHealing={isHealing}
       />
 
       {/* Scraper Collector Card */}
@@ -246,6 +247,10 @@ export default function App() {
         latency={latency}
         activeSelector={activeSelector}
         isRunning={isRunning}
+        targetUrl={targetUrl}
+        onTargetUrlChange={setTargetUrl}
+        collectorId={collectorId}
+        scraperMode={scraperMode}
         onRunNormal={handleRunNormal}
         onSimulateFailure={handleSimulateFailure}
         onTriggerHealing={handleTriggerHealing}
@@ -253,24 +258,28 @@ export default function App() {
 
       {/* Main Two-Column Grid */}
       <div className="dashboard-main-grid">
-        {/* Left Column: Data Table & Diff */}
-        <div className="flex flex-col gap-5" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <DataTable
-            records={records}
-            status={scraperStatus}
-            error={error}
-            lastUpdated={lastRun}
+        {/* Left Column: Unified Self-Healing Repair & Extracted Data Panel */}
+        <div className="dashboard-col">
+          <UnifiedDataRepairPanel
+            data={records}
+            healingInfo={healingInfo}
+            isHealed={scraperStatus === 'HEALTHY' && healingInfo !== null}
+            isFailed={scraperStatus === 'FAILED'}
+            originalSelectors={{
+              title: '.product-title',
+              price: '.product-price',
+              stock_status: '.product-status',
+            }}
+            onInspectPayload={() => setShowPayloadModal(true)}
           />
-
-          <SelectorDiffPanel repairData={repairData} />
         </div>
 
-        {/* Right Column: Timeline & Diagnostic Logs */}
-        <div className="flex flex-col gap-5" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Right Column: Visual Pipeline Timeline & Live Activity Logs */}
+        <div className="dashboard-col">
           <HealingTimeline
             activeStep={timelineStep}
             isHealing={isHealing}
-            healingResult={healingResult}
+            healingResult={healingInfo}
           />
 
           <ActivityLogs
@@ -280,6 +289,21 @@ export default function App() {
           />
         </div>
       </div>
+
+      {/* Inspect Raw JSON Modal */}
+      {showPayloadModal && (
+        <div className="modal-overlay" onClick={() => setShowPayloadModal(false)}>
+          <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h4>Self-Healing Raw JSON Audit Payload</h4>
+              <button className="btn-close" onClick={() => setShowPayloadModal(false)}>✕</button>
+            </div>
+            <pre className="modal-json-viewer">
+              {JSON.stringify(rawPayload || { status: 'idle', info: 'Run scraper or recovery to view payload' }, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

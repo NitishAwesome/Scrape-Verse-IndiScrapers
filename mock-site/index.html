@@ -1,18 +1,936 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <title>Mock E-Commerce Target</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechStore Express - Premium Computer Peripherals & Electronics Catalog</title>
+    <meta name="description" content="Explore over 40+ top-tier gaming peripherals, mechanical keyboards, precision mice, monitors, and audio gear at TechStore Express.">
+    <link rel="canonical" href="https://techstore-mock.example.com/catalog">
+    <style>
+        :root {
+            --bg-main: #0b0f19;
+            --bg-card: #131b2e;
+            --border-color: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #10b981;
+            --accent-orange: #f97316;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background: var(--bg-main);
+            color: var(--text-main);
+        }
+        .site-header {
+            background: #0f172a;
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 32px;
+        }
+        .nav-container {
+            max-width: 1360px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .brand-logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--accent-blue);
+        }
+        .brand-logo span { color: var(--accent-green); }
+        .search-bar input {
+            padding: 10px 18px;
+            width: 420px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: #1e293b;
+            color: #fff;
+        }
+        .catalog-container {
+            max-width: 1360px;
+            margin: 32px auto;
+            padding: 0 20px;
+        }
+        .catalog-header {
+            margin-bottom: 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+        .catalog-header h1 { margin: 0; font-size: 26px; font-weight: 700; }
+        .catalog-count { color: var(--text-muted); font-size: 14px; }
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .product-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .product-card:hover {
+            transform: translateY(-2px);
+            border-color: #3b82f6;
+        }
+        .card-top { margin-bottom: 14px; }
+        .product-badge {
+            display: inline-block;
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent-blue);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .product-category {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        }
+        .product-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            margin: 0 0 8px 0;
+            line-height: 1.4;
+        }
+        .product-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            margin-bottom: 14px;
+        }
+        .product-rating {
+            color: #facc15;
+            font-weight: 600;
+        }
+        .product-id-tag {
+            color: #64748b;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        .card-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            padding-top: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .product-price {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent-green);
+            margin: 0;
+        }
+        .product-status {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            margin: 0;
+        }
+        .product-status.out-of-stock {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+        .product-link {
+            display: none;
+        }
+    </style>
 </head>
-
 <body>
-    <h1>Product Store</h1>
-    <div class="product-card">
-        <h2 class="product-title">Wireless Gaming Mouse</h2>
-        <p class="product-price">$49.99</p>
-        <p class="product-status">In Stock</p>
-    </div>
-</body>
+    <header class="site-header">
+        <div class="nav-container">
+            <div class="brand-logo">TechStore<span>Express</span></div>
+            <div class="search-bar">
+                <input type="text" placeholder="Search catalog..." aria-label="Search">
+            </div>
+        </div>
+    </header>
 
+    <main class="catalog-container">
+        <div class="catalog-header">
+            <div>
+                <h1>Computer Peripherals & Gear Catalog</h1>
+                <span class="catalog-count">Showing 42 products in stock & verified</span>
+            </div>
+        </div>
+
+        <div class="product-grid">
+            <!-- Product 1 -->
+            <article class="product-card" data-product-id="PROD-101" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Bestseller</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">ProGear Wireless RGB Gaming Mouse</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-101</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$49.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-101">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 2 -->
+            <article class="product-card" data-product-id="PROD-102" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Featured</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">Apex Pro Mechanical TKL Keyboard</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-102</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$149.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-102">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 3 -->
+            <article class="product-card" data-product-id="PROD-103" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Top Rated</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">Quantum Sound Spatial 7.1 Headset</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-103</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$89.50</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-103">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 4 -->
+            <article class="product-card" data-product-id="PROD-104" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">New</div>
+                    <div class="product-category" data-category="Monitors">Monitors</div>
+                    <h2 class="product-title" itemprop="name">UltraView 27-inch 165Hz QHD Gaming Monitor</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.6">★ 4.6</span>
+                        <span class="product-id-tag">ID: PROD-104</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$279.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-104">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 5 -->
+            <article class="product-card" data-product-id="PROD-105" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Popular</div>
+                    <div class="product-category" data-category="Streaming">Streaming</div>
+                    <h2 class="product-title" itemprop="name">StreamCast 4K Ultra HD Autofocus Webcam</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.5">★ 4.5</span>
+                        <span class="product-id-tag">ID: PROD-105</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$119.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-105">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 6 -->
+            <article class="product-card" data-product-id="PROD-106" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Deal</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">HyperGlide Ultralight Honeycomb Mouse</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.4">★ 4.4</span>
+                        <span class="product-id-tag">ID: PROD-106</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$39.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-106">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 7 -->
+            <article class="product-card" data-product-id="PROD-107" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Essential</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">TitanDesk XXL Extended RGB Mousepad</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-107</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$24.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-107">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 8 -->
+            <article class="product-card" data-product-id="PROD-108" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Pro Choice</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">Vocalis Studio Cardioid USB Condenser Mic</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-108</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$109.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-108">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 9 -->
+            <article class="product-card" data-product-id="PROD-109" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Bestseller</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">KeyCraft Custom 75% Hot-Swappable Keyboard</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-109</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$134.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-109">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 10 -->
+            <article class="product-card" data-product-id="PROD-110" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Limited</div>
+                    <div class="product-category" data-category="Monitors">Monitors</div>
+                    <h2 class="product-title" itemprop="name">PanoraMax 34-inch Curved Ultrawide 144Hz Monitor</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-110</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$429.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-110">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 11 -->
+            <article class="product-card" data-product-id="PROD-111" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Featured</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">ErgoFit Wireless Vertical Ergonomic Mouse</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.5">★ 4.5</span>
+                        <span class="product-id-tag">ID: PROD-111</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$45.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-111">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 12 -->
+            <article class="product-card" data-product-id="PROD-122" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Trending</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">AeroArm Heavy-Duty Gas Spring Monitor Mount</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-112</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$59.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-112">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 13 -->
+            <article class="product-card" data-product-id="PROD-113" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Value</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">SilentType Low-Profile Wireless Keyboard</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.3">★ 4.3</span>
+                        <span class="product-id-tag">ID: PROD-113</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$69.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-113">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 14 -->
+            <article class="product-card" data-product-id="PROD-114" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Audio Pro</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">SonicBoom Active Noise-Cancelling Headphones</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-114</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$189.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-114">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 15 -->
+            <article class="product-card" data-product-id="PROD-115" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Storage</div>
+                    <div class="product-category" data-category="Storage">Storage</div>
+                    <h2 class="product-title" itemprop="name">TurboVault 2TB NVMe Gen4 High-Speed SSD</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-115</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$149.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-115">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 16 -->
+            <article class="product-card" data-product-id="PROD-116" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Lighting</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">LumiBar Screenbar Eye-Care Monitor Light</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.6">★ 4.6</span>
+                        <span class="product-id-tag">ID: PROD-116</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$42.50</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-116">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 17 -->
+            <article class="product-card" data-product-id="PROD-117" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Connectivity</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">OmniHub 12-in-1 Thunderbolt 4 Docking Station</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-117</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$179.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-117">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 18 -->
+            <article class="product-card" data-product-id="PROD-118" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Esports</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">ViperPro 8000Hz Ultra-Polling Wired Mouse</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-118</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$69.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-118">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 19 -->
+            <article class="product-card" data-product-id="PROD-119" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Custom</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">RetroKey Classic Mechanical Keyboard Blue Switch</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.4">★ 4.4</span>
+                        <span class="product-id-tag">ID: PROD-119</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$79.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-119">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 20 -->
+            <article class="product-card" data-product-id="PROD-120" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Streaming</div>
+                    <div class="product-category" data-category="Streaming">Streaming</div>
+                    <h2 class="product-title" itemprop="name">KeyDeck 15-Key Customizable Macro Controller</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-120</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$129.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-120">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 21 -->
+            <article class="product-card" data-product-id="PROD-121" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Audio</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">AcousticDuo Desktop Hi-Fi Reference Speakers</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-121</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$159.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-121">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 22 -->
+            <article class="product-card" data-product-id="PROD-122B" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Capture</div>
+                    <div class="product-category" data-category="Streaming">Streaming</div>
+                    <h2 class="product-title" itemprop="name">CamCapture 4K60 Pro PCIe Game Capture Card</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-122</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$219.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-122">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 23 -->
+            <article class="product-card" data-product-id="PROD-123" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Display</div>
+                    <div class="product-category" data-category="Monitors">Monitors</div>
+                    <h2 class="product-title" itemprop="name">ColorMaster 32-inch 4K HDR Graphic Designer Display</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-123</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$499.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-123">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 24 -->
+            <article class="product-card" data-product-id="PROD-124" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Cooling</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">FrostPad Aluminum Dual-Fan Laptop Cooler</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.5">★ 4.5</span>
+                        <span class="product-id-tag">ID: PROD-124</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$34.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-124">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 25 -->
+            <article class="product-card" data-product-id="PROD-125" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Keycaps</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">Nebula PBT Double-Shot Custom Keycap Set</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-125</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$38.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-125">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 26 -->
+            <article class="product-card" data-product-id="PROD-126" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Mice</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">PulseGlide MMO 12-Button Side-Panel Mouse</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.6">★ 4.6</span>
+                        <span class="product-id-tag">ID: PROD-126</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$64.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-126">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 27 -->
+            <article class="product-card" data-product-id="PROD-127" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Power</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">VoltMax 100W GaN Multi-Port Fast Desktop Charger</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-127</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$49.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-127">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 28 -->
+            <article class="product-card" data-product-id="PROD-128" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Storage</div>
+                    <div class="product-category" data-category="Storage">Storage</div>
+                    <h2 class="product-title" itemprop="name">ArmorVault 4TB Rugged External Portable SSD</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-128</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$289.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-128">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 29 -->
+            <article class="product-card" data-product-id="PROD-129" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Lighting</div>
+                    <div class="product-category" data-category="Streaming">Streaming</div>
+                    <h2 class="product-title" itemprop="name">GlowPanel Edge-Lit LED Studio Key Light</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-129</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$99.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-129">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 30 -->
+            <article class="product-card" data-product-id="PROD-130" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Wireless</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">AirType 60% Ultra-Compact Wireless Mechanical Keyboard</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.6">★ 4.6</span>
+                        <span class="product-id-tag">ID: PROD-130</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$89.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-130">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 31 -->
+            <article class="product-card" data-product-id="PROD-131" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Audio</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">ClearVoice Boom Arm Studio Mic Stand</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-131</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$39.95</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-131">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 32 -->
+            <article class="product-card" data-product-id="PROD-132" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Ergonomic</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">CloudRest Memory Foam Keyboard & Mouse Wrist Rest</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-132</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$19.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-132">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 33 -->
+            <article class="product-card" data-product-id="PROD-133" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Gaming</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">ShadowClaw Ergonomic Wireless Mouse with OLED Screen</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-133</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$79.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-133">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 34 -->
+            <article class="product-card" data-product-id="PROD-134" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Speed</div>
+                    <div class="product-category" data-category="Monitors">Monitors</div>
+                    <h2 class="product-title" itemprop="name">HyperSpeed 24.5-inch 240Hz Fast-IPS Esports Monitor</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-134</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$319.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-134">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 35 -->
+            <article class="product-card" data-product-id="PROD-135" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Cables</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">FlexCoil Custom Aviator Coiled Keyboard Cable</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-135</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$26.50</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-135">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 36 -->
+            <article class="product-card" data-product-id="PROD-136" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Audio</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">TrueBass Wireless Gaming Earbuds with Ultra-Low Latency</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.5">★ 4.5</span>
+                        <span class="product-id-tag">ID: PROD-136</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$59.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-136">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 37 -->
+            <article class="product-card" data-product-id="PROD-137" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Productivity</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">MultiConnect Full-Size Wireless Ergonomic Keyboard</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.6">★ 4.6</span>
+                        <span class="product-id-tag">ID: PROD-137</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$69.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-137">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 38 -->
+            <article class="product-card" data-product-id="PROD-138" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Accessories</div>
+                    <div class="product-category" data-category="Accessories">Accessories</div>
+                    <h2 class="product-title" itemprop="name">PureGlide PTFE Replacement Mouse Skates</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.8">★ 4.8</span>
+                        <span class="product-id-tag">ID: PROD-138</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$9.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-138">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 39 -->
+            <article class="product-card" data-product-id="PROD-139" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Storage</div>
+                    <div class="product-category" data-category="Storage">Storage</div>
+                    <h2 class="product-title" itemprop="name">SpeedDrive 1TB Portable USB-C Mini Solid State Drive</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.7">★ 4.7</span>
+                        <span class="product-id-tag">ID: PROD-139</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$89.00</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-139">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 40 -->
+            <article class="product-card" data-product-id="PROD-140" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Audio</div>
+                    <div class="product-category" data-category="Audio">Audio</div>
+                    <h2 class="product-title" itemprop="name">StudioPro XLR Dynamic Broadcast Microphone</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-140</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$199.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-140">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 41 -->
+            <article class="product-card" data-product-id="PROD-141" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Gaming</div>
+                    <div class="product-category" data-category="Keyboards">Keyboards</div>
+                    <h2 class="product-title" itemprop="name">MagnaSwitch Rapid-Trigger Hall Effect Gaming Keyboard</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.9">★ 4.9</span>
+                        <span class="product-id-tag">ID: PROD-141</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$174.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-141">View Details</a>
+                </div>
+            </article>
+
+            <!-- Product 42 -->
+            <article class="product-card" data-product-id="PROD-142" itemscope itemtype="https://schema.org/Product">
+                <div class="card-top">
+                    <div class="product-badge">Featured</div>
+                    <div class="product-category" data-category="Mice">Mice</div>
+                    <h2 class="product-title" itemprop="name">Wireless Dual-Mode Precision Office Mouse</h2>
+                    <div class="product-meta-row">
+                        <span class="product-rating" data-rating="4.5">★ 4.5</span>
+                        <span class="product-id-tag">ID: PROD-142</span>
+                    </div>
+                </div>
+                <div class="card-bottom">
+                    <p class="product-price" itemprop="price">$32.99</p>
+                    <p class="product-status" itemprop="availability">In Stock</p>
+                    <a class="product-link" href="https://techstore-mock.example.com/products/prod-142">View Details</a>
+                </div>
+            </article>
+        </div>
+    </main>
+</body>
 </html>

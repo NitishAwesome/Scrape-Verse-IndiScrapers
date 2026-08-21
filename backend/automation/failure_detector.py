@@ -74,12 +74,39 @@ class FailureDetector:
                 error=f"Unrecognized scrape result type: {type(result)}",
             )
 
-        # 1. Check for explicit error message or failed status
+        # 1. Check for missing required fields or invalid values in extracted records if data present
+        if data:
+            for idx, record in enumerate(data):
+                rec_dict = record.model_dump() if isinstance(record, ProductRecord) else dict(record)
+                for field in self.required_fields:
+                    val = rec_dict.get(field)
+                    if val is None or not str(val).strip():
+                        logger.warning("Failure detected: Missing required field '%s' in record %d", field, idx)
+                        return ScrapeFailure(
+                            scraper_id=scraper_id,
+                            failure_type=FailureType.VALIDATION_ERROR.value,
+                            field=field,
+                            old_selector=f".product-{field.replace('_', '-')}",
+                            error=f"Required field '{field}' is missing or empty in record {idx}",
+                        )
+
+                    # Invalid value checks (e.g. price has no digits)
+                    if field == "price" and not any(ch.isdigit() for ch in str(val)):
+                        logger.warning("Failure detected: Invalid price value '%s' in record %d", val, idx)
+                        return ScrapeFailure(
+                            scraper_id=scraper_id,
+                            failure_type=FailureType.INVALID_VALUE.value,
+                            field="price",
+                            old_selector=".product-price",
+                            error=f"Invalid price value '{val}' (contains no numeric digits)",
+                        )
+
+        # 2. Check for explicit error message or failed status
         if status == ScrapeStatus.FAILED.value or status == ScrapeStatus.FAILED or error:
             error_str = error or "Scrape operation returned failed status"
             return self._classify_error(scraper_id, error_str)
 
-        # 2. Check for empty records payload
+        # 3. Check for empty records payload
         if records_count == 0 or not data:
             logger.warning("Failure detected: Scraper returned 0 records")
             return ScrapeFailure(
@@ -88,34 +115,74 @@ class FailureDetector:
                 error="Scraper returned 0 extracted records",
             )
 
-        # 3. Check for missing required fields or invalid values in extracted records
+        # Scrape succeeded with valid data
+        return None
+
+
+    def detect_all(self, result: ScrapeResult | dict[str, Any] | None) -> list[ScrapeFailure]:
+        """
+        Scan a scrape result and return ALL distinct field failures.
+
+        Used for batch analysis to repair multiple broken fields in one analysis pass.
+        Deduplicates by field so multi-record failures produce one repair per broken selector rule.
+        """
+        first = self.detect(result)
+        if not first:
+            return []
+
+        data = (
+            result.data
+            if isinstance(result, ScrapeResult)
+            else (result.get("data", []) if isinstance(result, dict) else [])
+        )
+        scraper_id = (
+            result.collector_id
+            if isinstance(result, ScrapeResult)
+            else (str(result.get("collector_id", "unknown")) if isinstance(result, dict) else "unknown")
+        )
+
+        # If data payload is empty or zero records extracted, all required fields are failing
+        if not data:
+            return [
+                ScrapeFailure(
+                    scraper_id=scraper_id,
+                    failure_type=first.failure_type,
+                    field=field,
+                    old_selector=f".product-{field.replace('_', '-')}",
+                    error=f"Required field '{field}' could not be extracted (0 records)",
+                )
+                for field in self.required_fields
+            ]
+
+        failures_by_field: dict[str, ScrapeFailure] = {}
         for idx, record in enumerate(data):
             rec_dict = record.model_dump() if isinstance(record, ProductRecord) else dict(record)
             for field in self.required_fields:
+                if field in failures_by_field:
+                    continue
                 val = rec_dict.get(field)
                 if val is None or not str(val).strip():
-                    logger.warning("Failure detected: Missing required field '%s' in record %d", field, idx)
-                    return ScrapeFailure(
+                    failures_by_field[field] = ScrapeFailure(
                         scraper_id=scraper_id,
                         failure_type=FailureType.VALIDATION_ERROR.value,
                         field=field,
                         old_selector=f".product-{field.replace('_', '-')}",
                         error=f"Required field '{field}' is missing or empty in record {idx}",
                     )
-
-                # Invalid value checks (e.g. price has no digits)
-                if field == "price" and not any(ch.isdigit() for ch in str(val)):
-                    logger.warning("Failure detected: Invalid price value '%s' in record %d", val, idx)
-                    return ScrapeFailure(
+                elif field == "price" and not any(ch.isdigit() for ch in str(val)):
+                    failures_by_field[field] = ScrapeFailure(
                         scraper_id=scraper_id,
                         failure_type=FailureType.INVALID_VALUE.value,
                         field="price",
                         old_selector=".product-price",
-                        error=f"Invalid price value '{val}' (contains no numeric digits)",
+                        error=f"Invalid price value '{val}' (no numeric digits)",
                     )
 
-        # Scrape succeeded with valid data
-        return None
+        if failures_by_field:
+            return list(failures_by_field.values())
+
+        return [first]
+
 
     def _classify_error(self, scraper_id: str, error_str: str) -> ScrapeFailure:
         """Classify error string into a specific failure category, field, and selector."""

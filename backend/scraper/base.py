@@ -9,5 +9,10 @@ class ScraperClient(ABC):
     """Contract implemented by mock and Bright Data clients."""
 
     @abstractmethod
-    def execute(self, *, trigger_failure: bool = False) -> RawScrapePayload:
+    def execute(
+        self,
+        *,
+        target_url: str | None = None,
+        trigger_failure: bool = False,
+    ) -> RawScrapePayload:
         """Run a scrape and return raw records before normalization."""

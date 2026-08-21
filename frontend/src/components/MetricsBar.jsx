@@ -5,6 +5,7 @@ export default function MetricsBar({ metrics }) {
   const {
     scraperHealth = 'HEALTHY',
     activeScrapers = 1,
+    collectorId = 'c_mt3d61eq4viqmv3f4',
     healingEventsCount = 0,
     successRate = '100%',
     avgLatency = '42ms',
@@ -33,7 +34,7 @@ export default function MetricsBar({ metrics }) {
           <span className="metric-label">Active Collectors</span>
           <div className="metric-value-row">
             <span className="metric-value text-light">{activeScrapers}</span>
-            <span className="metric-subtext">c_mock_123456</span>
+            <span className="metric-subtext text-cyan">{collectorId}</span>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # Ensure root path is accessible for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -317,6 +317,73 @@ class TestHealingManager(unittest.TestCase):
         self.assertTrue(first_event.validation_result)
         self.assertEqual(first_event.status, "success")
 
+    def test_batch_healing_simultaneous_multi_field_mutation(self):
+        """Test batch healing repair of title, price, and stock in one cycle."""
+        multi_html = """
+        <div class="product-card">
+            <h2 class="product-name">Pro Mechanical Keyboard</h2>
+            <span class="current-price">$129.99</span>
+            <span class="availability">In Stock</span>
+        </div>
+        """
+        manager = HealingManager()
+        result = manager.heal_html(
+            html_content=multi_html,
+            initial_selectors={
+                "title": ".product-title",
+                "price": ".product-price",
+                "stock_status": ".product-status",
+            },
+        )
+        self.assertEqual(result.status, "success")
+        self.assertTrue(result.repaired)
+        self.assertEqual(len(result.attempts), 1)  # All 3 healed in batch 1 attempt!
+        self.assertEqual(len(result.selector_repairs), 3)
+
+        repaired_map = {r.field: r.new_selector for r in result.selector_repairs}
+        self.assertEqual(repaired_map.get("title"), ".product-name")
+        self.assertEqual(repaired_map.get("price"), ".current-price")
+        self.assertEqual(repaired_map.get("stock_status"), ".availability")
+
+    def test_dynamic_repair_two_fields(self):
+        """Test dynamic repair when exactly two selectors are broken."""
+        two_field_html = """
+        <div class="product-card">
+            <h2 class="product-title">Gaming Headset</h2>
+            <div class="current-price">$79.99</div>
+            <div class="availability">Only 2 Left</div>
+        </div>
+        """
+        manager = HealingManager()
+        result = manager.heal_html(
+            html_content=two_field_html,
+            initial_selectors={
+                "title": ".product-title",
+                "price": ".product-price",
+                "stock_status": ".product-status",
+            },
+        )
+        self.assertEqual(result.status, "success")
+        self.assertTrue(result.repaired)
+        self.assertEqual(len(result.selector_repairs), 2)
+        repaired_fields = {r.field for r in result.selector_repairs}
+        self.assertEqual(repaired_fields, {"price", "stock_status"})
+
+    def test_configurable_max_retries_limit(self):
+        """Test that max_retries limit is strictly enforced."""
+        always_fail_html = "<div><p>Empty content without target fields</p></div>"
+        manager = HealingManager(max_retries=4)
+        self.assertEqual(manager.max_retries, 4)
+        result = manager.heal_html(
+            html_content=always_fail_html,
+            initial_selectors={"title": ".non-existent", "price": ".missing-price"},
+        )
+        self.assertFalse(result.repaired)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(len(result.attempts), 4)
+        self.assertIn("Exhausted maximum retry limit", result.error)
+
+
 
 class TestHealingRouter(unittest.TestCase):
     """Tests for FastAPI endpoints mounted from healing_router."""
@@ -368,17 +435,60 @@ class TestHealingRouter(unittest.TestCase):
         self.assertEqual(body["data"][0]["price"], "$49.99")
 
 
+    def test_post_healing_multi_demo_endpoint(self):
+        """Test multi-selector healing endpoint repairing title, price, and stock across full catalog."""
+        response = self.client.post("/api/healing/multi-demo")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body.get("status"), "success")
+        self.assertTrue(body.get("repaired"))
+        self.assertLessEqual(body.get("attempts", 0), 3)
+        self.assertEqual(body.get("validation"), "passed")
+
+        repaired_sel = body.get("repaired_selectors", {})
+        self.assertEqual(repaired_sel.get("title"), ".product-name")
+        self.assertEqual(repaired_sel.get("price"), ".current-price")
+        self.assertEqual(repaired_sel.get("stock_status"), ".availability")
+
+        final_data = body.get("final_data", [])
+        self.assertGreaterEqual(len(final_data), 30)
+        self.assertEqual(final_data[0]["title"], "ProGear Wireless RGB Gaming Mouse")
+        self.assertEqual(final_data[0]["price"], "$49.99")
+        self.assertEqual(final_data[0]["stock_status"], "In Stock")
+
+        repairs = body.get("repairs", [])
+        self.assertEqual(len(repairs), 3)
+        for r in repairs:
+            self.assertIn("field", r)
+            self.assertIn("old_selector", r)
+            self.assertIn("new_selector", r)
+            self.assertGreaterEqual(r.get("confidence", 0), 0.5)
+
+    def test_get_healing_multi_demo_endpoint(self):
+        response = self.client.get("/api/healing/multi-demo")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+        self.assertGreaterEqual(len(response.json().get("final_data", [])), 30)
+
     def test_existing_endpoints_unaffected(self):
         root_resp = self.client.get("/")
         self.assertEqual(root_resp.status_code, 200)
         self.assertEqual(root_resp.json().get("status"), "online")
 
-        scrape_resp = self.client.get("/api/scrape")
-        self.assertEqual(scrape_resp.status_code, 200)
-        body = scrape_resp.json()
-        self.assertEqual(body.get("status"), "success")
-        self.assertEqual(body["data"][0]["price"], "$49.99")
+        with patch("backend.main.scraper_service.client") as mock_client:
+            from backend.scraper.mock_client import MockScraperClient
+            from backend.scraper.config import ScraperSettings, ScraperMode
+            mock_client.execute.side_effect = MockScraperClient(
+                ScraperSettings(scraper_mode=ScraperMode.MOCK)
+            ).execute
+            scrape_resp = self.client.get("/api/scrape")
+            self.assertEqual(scrape_resp.status_code, 200)
+            body = scrape_resp.json()
+            self.assertEqual(body.get("status"), "success")
+            self.assertGreaterEqual(len(body["data"]), 30)
+            self.assertEqual(body["data"][0]["price"], "$49.99")
 
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -17,6 +17,10 @@ class ProductRecord(BaseModel):
     title: str
     price: str
     stock_status: str = Field(description="Normalized stock label, e.g. 'In Stock'")
+    rating: float | str | None = Field(default=None, description="Product review score e.g. 4.8")
+    category: str | None = Field(default=None, description="Product category e.g. 'Keyboards'")
+    product_url: str | None = Field(default=None, description="Canonical product link")
+    product_id: str | None = Field(default=None, description="Unique product SKU or identifier")
 
 
 class ScrapeResult(BaseModel):

@@ -274,3 +274,34 @@ class DOMAnalyzer:
 
         return extracted
 
+    def extract_all_with_selectors(
+        self,
+        html_content: str,
+        selectors: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        """
+        Extract all matching product records from HTML content using a map of selectors.
+
+        Parses multi-card catalogs as well as single product pages.
+        """
+        if not html_content or not html_content.strip():
+            return []
+
+        from backend.scraper.mock_client import _MultiProductHTMLParser
+
+        parser = _MultiProductHTMLParser(selectors=selectors)
+        try:
+            parser.feed(html_content)
+        except Exception as exc:
+            logger.error("Failed to parse HTML in extract_all_with_selectors: %s", exc)
+            return []
+
+        if parser.records:
+            return parser.records
+
+        single = self.extract_with_selectors(html_content, selectors)
+        if any(v for v in single.values()):
+            return [single]
+
+        return []
+

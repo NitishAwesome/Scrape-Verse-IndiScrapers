@@ -28,12 +28,22 @@ class ScraperSettings(BaseSettings):
     )
 
     brightdata_api_token: str | None = Field(default=None, alias="BRIGHTDATA_API_TOKEN")
-    brightdata_collector_id: str | None = Field(default=None, alias="BRIGHTDATA_COLLECTOR_ID")
-    brightdata_api_base_url: str = Field(
-        default="https://api.brightdata.com",
-        alias="BRIGHTDATA_API_BASE_URL",
+    brightdata_collector_id: str | None = Field(
+        default="c_mt3d61eq4viqmv3f4", alias="BRIGHTDATA_COLLECTOR_ID"
     )
-    brightdata_timeout_seconds: float = Field(default=30.0, alias="BRIGHTDATA_TIMEOUT_SECONDS")
+    brightdata_api_base_url: str = Field(
+        default="https://api.brightdata.com", alias="BRIGHTDATA_API_BASE_URL"
+    )
+    brightdata_timeout_seconds: float = Field(
+        default=60.0, alias="BRIGHTDATA_TIMEOUT_SECONDS"
+    )
+    target_url: str = Field(
+        default="https://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+        alias="TARGET_URL",
+    )
+    max_healing_attempts: int = Field(
+        default=10, alias="MAX_HEALING_ATTEMPTS"
+    )
 
 
 @lru_cache

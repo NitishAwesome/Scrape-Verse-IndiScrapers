@@ -4,7 +4,9 @@
  * - GET  /api/scrape
  * - GET  /api/scrape?fail=true
  * - GET  /api/healing/status
+ * - POST /api/healing/recover
  * - POST /api/healing/demo
+ * - POST /api/healing/multi-demo
  */
 
 const API_BASE = '/api';
@@ -20,7 +22,7 @@ export async function fetchHealingStatus() {
       status: 'online',
       module: 'self-healing (mock fallback)',
       mock_llm_mode: true,
-      max_retries: 3,
+      max_retries: 10,
       supported_failure_types: [
         'SelectorNotFound',
         'ValidationError',
@@ -32,10 +34,14 @@ export async function fetchHealingStatus() {
   }
 }
 
-export async function runScrape(fail = false) {
+export async function runScrape(fail = false, targetUrl = '') {
   const startTime = performance.now();
   try {
-    const url = `${API_BASE}/scrape${fail ? '?fail=true' : ''}`;
+    const params = new URLSearchParams();
+    if (fail) params.append('fail', 'true');
+    if (targetUrl) params.append('url', targetUrl);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const url = `${API_BASE}/scrape${queryString}`;
     const res = await fetch(url);
     const latency = Math.round(performance.now() - startTime);
     const data = await res.json();
@@ -75,10 +81,17 @@ export async function runScrape(fail = false) {
   }
 }
 
-export async function runHealingDemo() {
+/**
+ * Unified Self-Healing Recovery
+ * Handles arbitrary number of broken selectors (1, 2, 3, or N) in a single batch pass.
+ */
+export async function runUnifiedHealing(targetUrl = '') {
   const startTime = performance.now();
   try {
-    const res = await fetch(`${API_BASE}/healing/demo`, {
+    const params = new URLSearchParams();
+    if (targetUrl) params.append('url', targetUrl);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/healing/recover${queryString}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -94,56 +107,76 @@ export async function runHealingDemo() {
     return {
       status: 'success',
       repaired: true,
-      failure_type: 'ValidationError',
-      old_selector: '.product-price',
-      new_selector: '.current-price',
-      confidence: 1.0,
+      failures_detected: 3,
+      selectors_repaired: 3,
+      attempts: 1,
+      validation: 'passed',
       validation_result: true,
-      retry_count: 1,
-      healing_event: {
-        scraper_id: 'c_mock_123456',
-        failure_type: 'ValidationError',
-        old_selector: '.product-price',
-        new_selector: '.current-price',
-        target_field: 'price',
-        confidence: 1.0,
-        validation_result: true,
-        retry_count: 1,
-        status: 'success',
-        message: "Validation successful: Extracted 1 record(s) with valid 'price'",
-        timestamp: new Date().toISOString(),
+      overall_status: 'FULLY HEALED',
+      original_selectors: {
+        title: '.product-title',
+        price: '.product-price',
+        stock_status: '.product-status',
       },
-      healing_result: {
-        status: 'success',
-        repaired: true,
-        attempts: [
-          {
-            scraper_id: 'c_mock_123456',
-            failure_type: 'ValidationError',
-            old_selector: '.product-price',
-            new_selector: '.current-price',
-            target_field: 'price',
-            confidence: 1.0,
-            validation_result: true,
-            retry_count: 1,
-            status: 'success',
-            message: "Validation successful: Extracted 1 record(s) with valid 'price'",
-            timestamp: new Date().toISOString(),
-          },
-        ],
-        selector_repairs: [
-          {
-            field: 'price',
-            old_selector: '.product-price',
-            new_selector: '.current-price',
-            confidence: 1.0,
-            reasoning: "Identified replacement DOM element <div> with selector '.current-price' containing value '$49.99'",
-          },
-        ],
-        error: null,
+      repaired_selectors: {
+        title: '.product-name',
+        price: '.current-price',
+        stock_status: '.availability',
       },
+      repairs: [
+        {
+          field: 'title',
+          old_selector: '.product-title',
+          new_selector: '.product-name',
+          confidence: 1.0,
+          status: 'HEALED',
+          extracted_value: 'Wireless Gaming Mouse',
+          attempt: 1,
+          validation_result: true,
+          reasoning: "Identified replacement DOM element <h2> with selector '.product-name'",
+        },
+        {
+          field: 'price',
+          old_selector: '.product-price',
+          new_selector: '.current-price',
+          confidence: 1.0,
+          status: 'HEALED',
+          extracted_value: '$49.99',
+          attempt: 1,
+          validation_result: true,
+          reasoning: "Identified replacement DOM element <div> with selector '.current-price'",
+        },
+        {
+          field: 'stock_status',
+          old_selector: '.product-status',
+          new_selector: '.availability',
+          confidence: 1.0,
+          status: 'HEALED',
+          extracted_value: 'In Stock',
+          attempt: 1,
+          validation_result: true,
+          reasoning: "Identified replacement DOM element <p> with selector '.availability'",
+        },
+      ],
+      data: [
+        {
+          title: 'Wireless Gaming Mouse',
+          price: '$49.99',
+          stock_status: 'In Stock',
+        },
+      ],
+      final_data: [
+        {
+          title: 'Wireless Gaming Mouse',
+          price: '$49.99',
+          stock_status: 'In Stock',
+        },
+      ],
       latencyMs: latency,
       timestamp: new Date().toISOString(),
     };
   }
 }
+
+export const runHealingDemo = runUnifiedHealing;
+export const runMultiHealingDemo = runUnifiedHealing;

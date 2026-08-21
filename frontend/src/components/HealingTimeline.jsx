@@ -1,57 +1,19 @@
 import React from 'react';
-import { GitCommit, AlertTriangle, Search, Cpu, RefreshCw, CheckCircle2, Zap } from 'lucide-react';
+import { GitCommit, AlertTriangle, Search, Cpu, RefreshCw, Zap, CheckCircle2, Sparkles } from 'lucide-react';
 
-export default function HealingTimeline({ activeStep = 0, isHealing = false, healingResult = null }) {
+export default function HealingTimeline({
+  activeStep = 0,
+  isHealing = false,
+  healingResult = null,
+}) {
   const steps = [
-    {
-      id: 1,
-      title: 'Scrape Initiated',
-      desc: 'Collector triggered on target URL',
-      icon: GitCommit,
-      color: 'cyan',
-    },
-    {
-      id: 2,
-      title: 'Selector Failure Detected',
-      desc: 'Price element missing from DOM',
-      icon: AlertTriangle,
-      color: 'red',
-    },
-    {
-      id: 3,
-      title: 'DOM Structure Analyzed',
-      desc: 'Parsed 14 elements, found candidates',
-      icon: Search,
-      color: 'violet',
-    },
-    {
-      id: 4,
-      title: 'AI Repair Proposed',
-      desc: 'Synthesized selector: .current-price',
-      icon: Cpu,
-      color: 'violet',
-    },
-    {
-      id: 5,
-      title: 'Selector Replaced',
-      desc: 'Active config dynamically patched',
-      icon: RefreshCw,
-      color: 'cyan',
-    },
-    {
-      id: 6,
-      title: 'Scrape Retried',
-      desc: 'Executed pipeline with new selector',
-      icon: Zap,
-      color: 'emerald',
-    },
-    {
-      id: 7,
-      title: 'Validation Passed',
-      desc: 'Extracted $49.99 successfully',
-      icon: CheckCircle2,
-      color: 'emerald',
-    },
+    { id: 1, title: 'Scrape Started', desc: 'Extraction executed against target DOM', icon: GitCommit, color: 'cyan' },
+    { id: 2, title: 'Failures Detected', desc: 'Missing or broken selector fields identified', icon: AlertTriangle, color: 'red' },
+    { id: 3, title: 'DOM Analyzed', desc: 'Scanned semantic tree, attributes & text heuristics', icon: Search, color: 'violet' },
+    { id: 4, title: 'AI Batch Selector Repair', desc: 'Proposed replacement selectors in one cycle', icon: Cpu, color: 'violet' },
+    { id: 5, title: 'Active Config Patched', desc: 'Injected repaired selectors into extraction map', icon: RefreshCw, color: 'cyan' },
+    { id: 6, title: 'Extraction Retried', desc: 'Re-executed scraper with repaired selectors', icon: Zap, color: 'emerald' },
+    { id: 7, title: 'Validation Passed', desc: 'Zero-downtime recovery verified & complete', icon: CheckCircle2, color: 'emerald' },
   ];
 
   const getStepStatus = (index) => {
@@ -66,11 +28,15 @@ export default function HealingTimeline({ activeStep = 0, isHealing = false, hea
       <div className="panel-header-row">
         <div className="panel-title-group">
           <Zap className="text-violet" size={18} />
-          <h4 className="panel-title">Self-Healing Visual Pipeline</h4>
+          <h4 className="panel-title">
+            Self-Healing Autonomous Pipeline
+          </h4>
           {isHealing ? (
             <span className="badge badge-violet animate-pulse">Running Recovery Engine...</span>
           ) : healingResult ? (
-            <span className="badge badge-emerald">Healed (Attempt {healingResult.retry_count || 1})</span>
+            <span className="badge badge-emerald">
+              <Sparkles size={11} /> Fully Healed (Attempt {healingResult.retry_count || healingResult.attempts || 1})
+            </span>
           ) : (
             <span className="badge badge-cyan">Standby / Ready</span>
           )}
@@ -91,7 +57,7 @@ export default function HealingTimeline({ activeStep = 0, isHealing = false, hea
             >
               <div className="step-node-wrapper">
                 <div className={`step-node step-node-${step.color} ${status === 'active' ? 'pulse-node' : ''}`}>
-                  <Icon size={16} />
+                  <Icon size={15} />
                 </div>
                 {idx < steps.length - 1 && (
                   <div className={`step-connector ${status === 'complete' ? 'connector-filled' : ''}`}></div>
