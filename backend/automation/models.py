@@ -37,6 +37,11 @@ class DOMCandidate(BaseModel):
     suggested_selector: str = Field(description="Calculated CSS selector targeting this candidate")
     field_hint: str | None = Field(default=None, description="Inferred target field (e.g. 'price')")
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    reasoning: str | None = Field(default=None, description="Explanation for candidate match")
+
+    @property
+    def reason(self) -> str | None:
+        return self.reasoning
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

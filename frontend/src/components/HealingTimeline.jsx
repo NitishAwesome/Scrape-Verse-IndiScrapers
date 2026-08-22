@@ -18,8 +18,9 @@ export default function HealingTimeline({
 
   const getStepStatus = (index) => {
     if (!isHealing && !healingResult && activeStep === 0) return 'idle';
+    if (activeStep === 7 && !isHealing) return 'complete';
     if (activeStep > index) return 'complete';
-    if (activeStep === index) return 'active';
+    if (activeStep === index) return isHealing ? 'active' : 'complete';
     return 'pending';
   };
 
@@ -33,9 +34,9 @@ export default function HealingTimeline({
           </h4>
           {isHealing ? (
             <span className="badge badge-violet animate-pulse">Running Recovery Engine...</span>
-          ) : healingResult ? (
+          ) : (healingResult || activeStep === 7) ? (
             <span className="badge badge-emerald">
-              <Sparkles size={11} /> Fully Healed (Attempt {healingResult.retry_count || healingResult.attempts || 1})
+              <Sparkles size={11} /> Fully Healed (Attempt {healingResult?.retry_count || healingResult?.attempts || 1})
             </span>
           ) : (
             <span className="badge badge-cyan">Standby / Ready</span>
@@ -56,8 +57,8 @@ export default function HealingTimeline({
               }`}
             >
               <div className="step-node-wrapper">
-                <div className={`step-node step-node-${step.color} ${status === 'active' ? 'pulse-node' : ''}`}>
-                  <Icon size={15} />
+                <div className={`step-node step-node-${step.color} ${status === 'active' ? 'pulse-node' : ''} ${status === 'complete' ? 'node-complete' : ''}`}>
+                  {status === 'complete' ? <CheckCircle2 size={15} className="text-emerald" /> : <Icon size={15} />}
                 </div>
                 {idx < steps.length - 1 && (
                   <div className={`step-connector ${status === 'complete' ? 'connector-filled' : ''}`}></div>

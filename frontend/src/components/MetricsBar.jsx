@@ -8,7 +8,6 @@ export default function MetricsBar({ metrics }) {
     collectorId = 'c_mt3d61eq4viqmv3f4',
     healingEventsCount = 0,
     successRate = '100%',
-    avgLatency = '42ms',
   } = metrics;
 
   return (

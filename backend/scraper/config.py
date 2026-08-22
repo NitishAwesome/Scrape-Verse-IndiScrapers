@@ -41,6 +41,12 @@ class ScraperSettings(BaseSettings):
         default="https://books.toscrape.com/catalogue/category/books/travel_2/index.html",
         alias="TARGET_URL",
     )
+    brightdata_unlocker_zone: str = Field(
+        default="unlocker", alias="BRIGHTDATA_UNLOCKER_ZONE"
+    )
+    healing_confidence_threshold: float = Field(
+        default=0.75, alias="HEALING_CONFIDENCE_THRESHOLD"
+    )
     max_healing_attempts: int = Field(
         default=10, alias="MAX_HEALING_ATTEMPTS"
     )

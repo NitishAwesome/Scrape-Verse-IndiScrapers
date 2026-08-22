@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, AlertTriangle, Sparkles, Globe, Clock, Layers, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Play, AlertTriangle, Sparkles, Globe, Clock, Layers, RefreshCw } from 'lucide-react';
 
 export default function ScraperCard({
   status,

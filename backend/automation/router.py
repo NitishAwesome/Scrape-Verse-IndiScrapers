@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body, Query
 
 from backend.automation.healing_manager import HealingManager
 from backend.automation.models import FailureType, HealingResult
@@ -85,19 +85,16 @@ def _build_unified_payload(
     repaired_selectors = dict(initial_selectors)
     repairs_list = []
 
-    final_data = healing_result.data if healing_result.data else [
-        {
-            "title": "Wireless Gaming Mouse",
-            "price": "$49.99",
-            "stock_status": "In Stock",
-        }
-    ]
+    final_data = healing_result.data if healing_result.data else []
 
-    field_value_map = {
-        "title": final_data[0].get("title", "Wireless Gaming Mouse") if final_data else "Wireless Gaming Mouse",
-        "price": final_data[0].get("price", "$49.99") if final_data else "$49.99",
-        "stock_status": final_data[0].get("stock_status", "In Stock") if final_data else "In Stock",
-    }
+    field_value_map = {}
+    if final_data:
+        first_item = final_data[0]
+        field_value_map = {
+            "title": first_item.get("title", "Extracted Title"),
+            "price": first_item.get("price", "$0.00"),
+            "stock_status": first_item.get("stock_status", "In Stock"),
+        }
 
     for idx, r in enumerate(healing_result.selector_repairs):
         repaired_selectors[r.field] = r.new_selector
@@ -116,7 +113,7 @@ def _build_unified_payload(
                 "extracted_value": field_value_map.get(r.field, "Extracted Value"),
                 "attempt": corresponding_attempt.retry_count if corresponding_attempt else idx + 1,
                 "validation_result": corresponding_attempt.validation_result if corresponding_attempt else healing_result.repaired,
-                "reasoning": r.reasoning,
+                "reasoning": r.reasoning or f"Dynamic DOM candidate matched with {int(r.confidence * 100)}% confidence",
             }
         )
 
@@ -128,7 +125,7 @@ def _build_unified_payload(
     message_text = (
         last_event.message
         if last_event and last_event.message
-        else f"Validation {validation_state}: Extraction successfully verified across {len(final_data)} records"
+        else f"Validation {validation_state}: Extraction verified across {len(final_data)} records"
     )
 
     failures_count = len(healing_result.selector_repairs) or (1 if not healing_result.repaired else 0)
@@ -175,6 +172,8 @@ def get_healing_status() -> dict[str, Any]:
         "module": "self-healing",
         "scraper_mode": settings.scraper_mode.value,
         "collector_id": collector_id,
+        "unlocker_zone": settings.brightdata_unlocker_zone,
+        "confidence_threshold": settings.healing_confidence_threshold,
         "mock_llm_mode": _healing_manager.repair_engine.mock_mode,
         "max_retries": _healing_manager.max_retries,
         "supported_failure_types": [ft.value for ft in FailureType],
@@ -236,14 +235,16 @@ def run_multi_healing_demo() -> dict[str, Any]:
 
 @router.post("/recover")
 @router.get("/recover")
-def run_unified_recovery(url: str | None = None) -> dict[str, Any]:
+def run_unified_recovery(
+    url: str | None = Query(default=None),
+    payload: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
     """
     Unified Self-Healing Recovery Endpoint.
 
     Detects and repairs broken selectors and recovers dataset for either live URLs or mock sites.
     """
-    settings = _scraper_service.settings
-    effective_url = url or settings.target_url
+    target_url = url or (payload.get("url") if payload else None) or _scraper_service.settings.target_url
 
     initial_selectors = {
         "title": ".product-title",
@@ -251,19 +252,13 @@ def run_unified_recovery(url: str | None = None) -> dict[str, Any]:
         "stock_status": ".product-status",
     }
 
-    if settings.scraper_mode.value == "brightdata" and effective_url and str(effective_url).startswith("http"):
-        logger.info("Executing self-healing recovery on live target website: %s", effective_url)
-        scrape_res = _scraper_service.execute_dict(target_url=effective_url, trigger_failure=False)
-        live_data = scrape_res.get("data", [])
-
-        mutated_html = get_mutated_catalog_html()
-        healing_result: HealingResult = _healing_manager.heal_html(
-            html_content=mutated_html,
+    # If live brightdata mode and valid HTTP URL, run live self-healing pipeline
+    if _scraper_service.settings.scraper_mode.value == "brightdata" and target_url and str(target_url).startswith("http"):
+        logger.info("Executing live self-healing recovery pipeline on target URL: %s", target_url)
+        healing_result = _healing_manager.heal_live(
+            target_url=str(target_url),
             initial_selectors=initial_selectors,
         )
-        if live_data:
-            healing_result.data = live_data
-
         return _build_unified_payload(healing_result, initial_selectors)
 
     return run_multi_healing_demo()

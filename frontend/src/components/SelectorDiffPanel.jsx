@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, CheckCircle2, Cpu, ShieldCheck, Sparkles, Code2, Layers } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Cpu, Sparkles, Code2 } from 'lucide-react';
 
 export default function SelectorDiffPanel({ repairData, multiRepairs = null }) {
   // If multi-repair data is present, render multi-selector comparison list

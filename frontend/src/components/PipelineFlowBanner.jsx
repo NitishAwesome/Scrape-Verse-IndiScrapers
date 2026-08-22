@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Cpu, Database, ShieldCheck, HeartPulse, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
+import { Globe, Cpu, Database, ShieldCheck, HeartPulse, ArrowRight } from 'lucide-react';
 
 export default function PipelineFlowBanner({ status, recordCount = 0, isHealing = false, targetUrl = '' }) {
   const isHealthy = status === 'HEALTHY';

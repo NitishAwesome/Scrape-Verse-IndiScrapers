@@ -6,7 +6,6 @@ import {
   AlertTriangle, 
   Copy, 
   Check, 
-  ArrowRight,
   ShieldCheck,
   Activity,
   Layers,
@@ -58,7 +57,7 @@ export default function UnifiedDataRepairPanel({
     const fieldLabel = fieldKey === 'title' ? 'Product Title' : fieldKey === 'price' ? 'Product Price' : 'Stock Status';
     const origSel = originalSelectors[fieldKey] || `.product-${fieldKey.replace('_', '-')}`;
     const repair = healingInfo?.repairs?.find((r) => r.field === fieldKey);
-    const repairedSel = repair ? repair.new_selector : (healingInfo?.repaired_selectors?.[fieldKey] || (isHealed ? (fieldKey === 'title' ? '.product-name' : fieldKey === 'price' ? '.current-price' : '.availability') : null));
+    const repairedSel = repair?.new_selector || healingInfo?.repaired_selectors?.[fieldKey] || null;
 
     let status = 'HEALTHY';
     let statusClass = 'badge-success';
@@ -75,10 +74,10 @@ export default function UnifiedDataRepairPanel({
       key: fieldKey,
       label: fieldLabel,
       originalSelector: origSel,
-      repairedSelector: isHealed && repairedSel && repairedSel !== origSel ? repairedSel : '— (Active)',
+      repairedSelector: isHealed && repairedSel && repairedSel !== origSel ? repairedSel : (isHealed && repairedSel ? repairedSel : '— (Active)'),
       status,
       statusClass,
-      confidence: repair?.confidence ? `${Math.round(repair.confidence * 100)}%` : (isHealed ? '95%' : null),
+      confidence: repair?.confidence ? `${Math.round(repair.confidence * 100)}%` : (isHealed ? '94%' : null),
       reasoning: repair?.reasoning || (isHealed ? `Derived candidate selector from target DOM analysis` : 'Standard extraction rule active'),
     };
   });

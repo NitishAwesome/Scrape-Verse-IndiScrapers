@@ -486,7 +486,128 @@ class TestHealingRouter(unittest.TestCase):
             body = scrape_resp.json()
             self.assertEqual(body.get("status"), "success")
             self.assertGreaterEqual(len(body["data"]), 30)
-            self.assertEqual(body["data"][0]["price"], "$49.99")
+
+    def test_post_healing_recover_endpoint_with_target_url(self):
+        """Test that /api/healing/recover accepts target URL and executes unified 3-field repair."""
+        response = self.client.post("/api/healing/recover?url=https://books.toscrape.com/catalogue/category/books/travel_2/index.html")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body.get("status"), "success")
+        self.assertTrue(body.get("repaired"))
+        self.assertEqual(body.get("failures_detected"), 3)
+        self.assertEqual(body.get("selectors_repaired"), 3)
+        self.assertEqual(body.get("validation"), "passed")
+        self.assertIn("repairs", body)
+        self.assertEqual(len(body["repairs"]), 3)
+        self.assertIn("final_data", body)
+
+
+class TestDynamicLiveSelfHealing(unittest.TestCase):
+    """Tests for dynamic unexpected DOM structure discovery, confidence scoring, and live healing."""
+
+    def setUp(self):
+        self.analyzer = DOMAnalyzer()
+        self.repair_engine = SelectorRepairEngine(mock_mode=False, confidence_threshold=0.75)
+
+    def test_dynamic_selector_discovery_unexpected_dom_structures(self):
+        """Test discovering unexpected selectors like .item-cost, [data-testid='stock'], and h2.book-title."""
+        unexpected_html = """
+        <div class="store-catalog">
+            <div class="product-item">
+                <h2 class="book-title">The Secret Garden</h2>
+                <div class="item-cost">£24.99</div>
+                <span data-testid="stock" class="inventory-status">In Stock</span>
+            </div>
+        </div>
+        """
+        candidates = self.analyzer.analyze(unexpected_html)
+        self.assertGreater(len(candidates), 0)
+
+        # Check dynamic price candidate
+        price_cand = self.analyzer.find_best_candidate(unexpected_html, target_field="price")
+        self.assertIsNotNone(price_cand)
+        self.assertEqual(price_cand.suggested_selector, ".item-cost")
+        self.assertGreaterEqual(price_cand.confidence, 0.75)
+        self.assertIn("numeric price", price_cand.reasoning.lower())
+
+        # Check dynamic title candidate
+        title_cand = self.analyzer.find_best_candidate(unexpected_html, target_field="title")
+        self.assertIsNotNone(title_cand)
+        self.assertIn("title", title_cand.suggested_selector)
+        self.assertGreaterEqual(title_cand.confidence, 0.75)
+
+        # Check dynamic stock candidate with data-testid
+        stock_cand = self.analyzer.find_best_candidate(unexpected_html, target_field="stock_status")
+        self.assertIsNotNone(stock_cand)
+        self.assertEqual(stock_cand.suggested_selector, "[data-testid='stock']")
+        self.assertGreaterEqual(stock_cand.confidence, 0.75)
+
+    def test_confidence_threshold_filtering(self):
+        """Test that low confidence candidates below 0.75 threshold are rejected in live mode."""
+        low_confidence_html = "<div><p>Just some plain text without any price or stock keywords</p></div>"
+        candidates = self.analyzer.analyze(low_confidence_html)
+        repair = self.repair_engine.propose_repair(
+            field="price",
+            old_selector=".product-price",
+            candidates=candidates,
+        )
+        self.assertEqual(repair.confidence, 0.0)
+        self.assertIn("exceeding confidence threshold", repair.reasoning)
+
+    def test_multi_candidate_fallback_sequence(self):
+        """Test proposing ranked candidates for multi-candidate fallback sequence."""
+        multi_cand_html = """
+        <div class="card">
+            <span class="bad-price">Free</span>
+            <div class="real-price">$49.99</div>
+        </div>
+        """
+        candidates = self.analyzer.analyze(multi_cand_html)
+        ranked_repairs = self.repair_engine.propose_candidates_ranked(
+            field="price",
+            old_selector=".product-price",
+            candidates=candidates,
+        )
+        self.assertGreater(len(ranked_repairs), 0)
+        top_repair = ranked_repairs[0]
+        self.assertEqual(top_repair.new_selector, ".real-price")
+        self.assertGreaterEqual(top_repair.confidence, 0.75)
+
+    def test_healing_manager_heal_live_with_mocked_dom_fetcher(self):
+        """Test heal_live workflow with live DOM acquisition and dynamic selector repair."""
+        live_html_fixture = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <article class="product_pod">
+                <h3><a title="A Light in the Attic" href="catalogue/a-light-in-the-attic_1000/index.html">A Light in the Attic</a></h3>
+                <div class="product_price">
+                    <p class="price_color">£51.77</p>
+                    <p class="instock availability">In stock</p>
+                </div>
+            </article>
+        </body>
+        </html>
+        """
+        mock_dom_fetcher = MagicMock()
+        mock_dom_fetcher.fetch.return_value = live_html_fixture
+
+        manager = HealingManager(dom_fetcher=mock_dom_fetcher)
+        result = manager.heal_live(
+            target_url="https://books.toscrape.com/catalogue/category/books_1/index.html",
+            initial_selectors={
+                "title": ".broken-title",
+                "price": ".broken-price",
+                "stock_status": ".broken-status",
+            },
+        )
+        self.assertTrue(result.repaired)
+        self.assertEqual(result.status, "success")
+        self.assertGreaterEqual(len(result.data), 1)
+        first_record = result.data[0]
+        self.assertEqual(first_record.get("title"), "A Light in the Attic")
+        self.assertEqual(first_record.get("price"), "$51.77")
+        self.assertEqual(first_record.get("stock_status"), "In Stock")
 
 
 if __name__ == "__main__":

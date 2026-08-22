@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Zap, Activity, RefreshCw, Cpu } from 'lucide-react';
+import { ShieldCheck, Activity, RefreshCw, Cpu } from 'lucide-react';
 
 export default function Header({ isConnected, onRefresh, isRefreshing }) {
   const [time, setTime] = useState(new Date().toLocaleTimeString());
