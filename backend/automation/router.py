@@ -123,9 +123,13 @@ def _build_unified_payload(
 
     validation_state = "passed" if healing_result.repaired else "failed"
     message_text = (
-        last_event.message
-        if last_event and last_event.message
-        else f"Validation {validation_state}: Extraction verified across {len(final_data)} records"
+        healing_result.error
+        if healing_result.error and not healing_result.repaired
+        else (
+            last_event.message
+            if last_event and last_event.message
+            else f"Validation {validation_state}: Extraction verified across {len(final_data)} records"
+        )
     )
 
     failures_count = len(healing_result.selector_repairs) or (1 if not healing_result.repaired else 0)
@@ -142,10 +146,10 @@ def _build_unified_payload(
         "records_extracted": len(final_data),
         "records_recovered": len(final_data) if healing_result.repaired else 0,
         "overall_status": "FULLY HEALED" if healing_result.repaired else "FAILED",
-        "failure_type": first_event.failure_type if first_event else "ValidationError",
-        "old_selector": first_repair.old_selector if first_repair else ".product-price",
-        "new_selector": first_repair.new_selector if first_repair else ".current-price",
-        "confidence": first_repair.confidence if first_repair else 1.0,
+        "failure_type": first_event.failure_type if first_event else ("SelectorNotFound" if not healing_result.repaired else "ValidationError"),
+        "old_selector": first_repair.old_selector if first_repair else None,
+        "new_selector": first_repair.new_selector if first_repair else None,
+        "confidence": first_repair.confidence if first_repair else 0.0,
         "retry_count": len(healing_result.attempts),
         "message": message_text,
         "original_selectors": initial_selectors,

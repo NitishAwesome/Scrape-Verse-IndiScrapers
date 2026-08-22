@@ -609,7 +609,70 @@ class TestDynamicLiveSelfHealing(unittest.TestCase):
         self.assertEqual(first_record.get("price"), "$51.77")
         self.assertEqual(first_record.get("stock_status"), "In Stock")
 
+    def test_adaptive_healing_unseen_dom_structure(self):
+        """
+        Prove that self-healing discovers replacement selectors from an unseen DOM
+        with zero occurrences of the demo selector names (.product-name, .current-price, .availability).
+        """
+        from backend.scraper.validator import validate_records
+
+        unseen_html = """
+        <div class="storefront-item-box">
+            <h2 class="catalog-heading-x7">Quantum ANC Headphones</h2>
+            <div class="weird-money-amount">$249.99</div>
+            <span class="inventory-status-pill" data-testid="stock">In Stock (14 Units)</span>
+        </div>
+        """
+        # 1. Assert that none of the 6 demo keywords exist in the test DOM
+        forbidden_keywords = [
+            "product-title", "product-name", "product-price",
+            "current-price", "product-status", "availability"
+        ]
+        for kw in forbidden_keywords:
+            self.assertNotIn(kw, unseen_html)
+
+        manager = HealingManager()
+        # 2. Start with completely broken/unrelated initial selectors
+        initial_selectors = {
+            "title": ".missing-heading-alpha",
+            "price": ".nonexistent-price-tag",
+            "stock_status": ".absent-stock-indicator",
+        }
+
+        # 3. Execute real healing pipeline
+        result = manager.heal_html(
+            html_content=unseen_html,
+            initial_selectors=initial_selectors,
+            scraper_id="unseen-custom-store",
+        )
+
+        # 4. Verify healing succeeded
+        self.assertTrue(result.repaired)
+        self.assertEqual(result.status, "success")
+        self.assertEqual(len(result.selector_repairs), 3)
+
+        # 5. Verify replacement selectors were discovered dynamically (NOT the demo selectors)
+        repaired_selectors = {r.field: r.new_selector for r in result.selector_repairs}
+        for kw in [".product-name", ".current-price", ".availability"]:
+            self.assertNotIn(kw, repaired_selectors.values())
+
+        # 6. Verify extracted records and values
+        self.assertGreaterEqual(len(result.data), 1)
+        record = result.data[0]
+        self.assertEqual(record.get("title"), "Quantum ANC Headphones")
+        self.assertEqual(record.get("price"), "$249.99")
+        self.assertEqual(record.get("stock_status"), "In Stock")
+
+        # 7. Verify Pydantic schema validation succeeds on recovered record without error
+        product_records = [ProductRecord(**d) for d in result.data]
+        self.assertEqual(len(product_records), 1)
+        validate_records(product_records)  # Validates required field contracts without raising ScraperValidationError
+        self.assertEqual(product_records[0].title, "Quantum ANC Headphones")
+        self.assertEqual(product_records[0].price, "$249.99")
+        self.assertEqual(product_records[0].stock_status, "In Stock")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
