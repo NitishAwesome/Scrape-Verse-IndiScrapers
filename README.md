@@ -16,7 +16,7 @@
 
 ---
 
-## 🎯 What is ScrapeGuard?
+##  What is ScrapeGuard?
 
 ScrapeGuard is a resilient web scraping system built for the **Into the Scrape-Verse Hackathon**.
 
@@ -30,7 +30,7 @@ ScrapeGuard can also safely refuse to repair when there is not enough evidence i
 
 ---
 
-## 📹 Demo Video
+##  Demo Video
 
 [![ScrapeGuard Demo](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](REPLACE_WITH_YOUTUBE_DEMO_URL)
 
