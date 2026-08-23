@@ -11,11 +11,53 @@ class FailureType(str, Enum):
     """Common categories of scraping failures."""
 
     SELECTOR_NOT_FOUND = "SelectorNotFound"
-    VALIDATION_ERROR = "ValidationError"
+    FIELD_MISSING = "FieldMissing"
     EMPTY_RESPONSE = "EmptyResponse"
-    API_ERROR = "ApiError"
+    VALIDATION_ERROR = "ValidationError"
     INVALID_VALUE = "InvalidValue"
+    DOM_CHANGED = "DOMChanged"
+    LOW_CONFIDENCE = "LowConfidence"
+    UNSUPPORTED_STRUCTURE = "UnsupportedStructure"
+    API_ERROR = "ApiError"
     UNKNOWN = "Unknown"
+
+
+class Recoverability(str, Enum):
+    """Assessment of whether a scraping failure can be safely repaired from DOM evidence."""
+
+    RECOVERABLE = "recoverable"
+    PARTIALLY_RECOVERABLE = "partially_recoverable"
+    AMBIGUOUS_UNSAFE = "ambiguous_unsafe"
+    UNSUPPORTED = "unsupported"
+
+
+class FailureClassification(BaseModel):
+    """Structured diagnosis of an extraction failure and its recoverability."""
+
+    failure_type: str = Field(
+        default=FailureType.DOM_CHANGED.value,
+        description="Classified category of scraping failure",
+    )
+    affected_fields: list[str] = Field(
+        default_factory=list,
+        description="Fields identified as broken or missing in the dataset",
+    )
+    recoverability: str = Field(
+        default=Recoverability.RECOVERABLE.value,
+        description="Recoverability tier: recoverable, partially_recoverable, ambiguous_unsafe, unsupported",
+    )
+    confidence: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Diagnostic confidence in DOM analysis assessment",
+    )
+    reason: str = Field(
+        description="Evidence-based reasoning explaining why failure occurred and recoverability state",
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
 
 
 class HealingStatus(str, Enum):
@@ -81,6 +123,21 @@ class ScrapeFailure(BaseModel):
         return self.model_dump(mode="json")
 
 
+class DataQualityMetrics(BaseModel):
+    """Quality metrics calculated from recovered extraction dataset."""
+
+    total_records: int = Field(default=0, description="Total count of records returned")
+    valid_records: int = Field(default=0, description="Count of records passing contract validation")
+    invalid_records: int = Field(default=0, description="Count of records with missing/invalid fields")
+    title_completeness: float = Field(default=100.0, description="Percentage of records with valid title")
+    price_completeness: float = Field(default=100.0, description="Percentage of records with valid numeric price")
+    stock_completeness: float = Field(default=100.0, description="Percentage of records with valid stock status")
+    overall_quality_score: float = Field(default=100.0, description="Overall average field completeness percentage")
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class SelectorRepair(BaseModel):
     """
     Represents an AI or rule-based proposed selector repair.
@@ -100,6 +157,10 @@ class SelectorRepair(BaseModel):
     reasoning: str | None = Field(
         default=None,
         description="Explanation for why this new selector was chosen",
+    )
+    candidates: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Ranked candidate selectors evaluated for this field",
     )
 
     @property
@@ -176,6 +237,48 @@ class HealingResult(BaseModel):
     error: str | None = Field(
         default=None,
         description="Error details if self-healing could not resolve the issue",
+    )
+    records_before: int = Field(
+        default=0,
+        description="Count of valid records before healing attempt",
+    )
+    records_after: int = Field(
+        default=0,
+        description="Count of valid records extracted after healing",
+    )
+    fields_detected_as_broken: list[str] = Field(
+        default_factory=list,
+        description="Names of fields detected as missing/invalid in baseline",
+    )
+    fields_repaired: list[str] = Field(
+        default_factory=list,
+        description="Names of fields successfully repaired and validated",
+    )
+    overall_confidence: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Aggregate confidence score across all repaired fields",
+    )
+    duration_ms: float = Field(
+        default=0.0,
+        description="Total duration of the recovery cycle in milliseconds",
+    )
+    verified: bool = Field(
+        default=False,
+        description="True if post-repair extraction passed contract validation with non-empty data",
+    )
+    data_quality: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Detailed quality metrics for the recovered dataset",
+    )
+    failure_classification: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured failure diagnosis and recoverability state",
+    )
+    recovery_summary: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured before -> healing -> after audit comparison",
     )
 
     def to_dict(self) -> dict[str, Any]:

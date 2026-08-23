@@ -132,19 +132,32 @@ class DOMAnalyzer:
         old_selector: str | None = None,
     ) -> DOMCandidate | None:
         """Find the single most probable replacement element for a target field."""
+        top = self.find_top_candidates(html_content, target_field=target_field, old_selector=old_selector, limit=1)
+        return top[0] if top else None
+
+    def find_top_candidates(
+        self,
+        html_content: str,
+        target_field: str,
+        old_selector: str | None = None,
+        limit: int = 5,
+    ) -> list[DOMCandidate]:
+        """Find ranked top candidate replacement elements for a target field."""
         candidates = self.analyze(html_content, target_field=target_field)
         matching = [c for c in candidates if c.field_hint == target_field]
 
         if not matching:
-            return None
+            return []
 
-        # Prefer candidates whose selector differs from the broken old_selector if provided
+        # If old_selector is provided, prioritize new candidate selectors while preserving confidence sort
         if old_selector:
             diff_candidates = [c for c in matching if c.suggested_selector != old_selector]
-            if diff_candidates:
-                return diff_candidates[0]
+            same_candidates = [c for c in matching if c.suggested_selector == old_selector]
+            ordered = diff_candidates + same_candidates
+        else:
+            ordered = matching
 
-        return matching[0]
+        return ordered[:limit]
 
     def _score_element(
         self,
@@ -207,17 +220,17 @@ class DOMAnalyzer:
             scores["title"] += 0.70
             reasons["title"].append(f"Link inside heading <{parent_tag}> > <a>")
 
-        if any(w in class_text for w in ("title", "name", "product-name", "item-name", "product-title", "book-title")):
-            scores["title"] += 0.45
+        if any(w in class_text for w in ("title", "name", "headline", "item-name", "product-name", "book-title")):
+            scores["title"] += 0.55
             reasons["title"].append(f"Class matches title semantics ({class_text[:20]})")
         if "title" in id_text or "name" in id_text:
-            scores["title"] += 0.35
+            scores["title"] += 0.40
             reasons["title"].append(f"ID matches title semantics (#{id_text})")
         if attrs.get("data-testid") == "title" or "title" in attrs.get("data-testid", ""):
-            scores["title"] += 0.50
+            scores["title"] += 0.55
             reasons["title"].append("data-testid matches title")
         if text and len(text) > 3 and not text.startswith("$") and not text.startswith("£") and not is_stock_text:
-            scores["title"] += 0.20
+            scores["title"] += 0.25
 
         # If a specific target_field was requested, evaluate that field
         if target_field and target_field in scores:
@@ -262,7 +275,7 @@ class DOMAnalyzer:
             lower = cls.lower()
             if any(key in lower for key in (
                 "price_color", "current-price", "item-cost", "price", "cost", "amount",
-                "product-name", "item-name", "product-title", "book-title", "title",
+                "product-name", "item-name", "product-title", "book-title", "title", "name", "headline",
                 "availability", "product-status", "instock", "inventory-status", "stock", "status"
             )):
                 return f".{cls}"

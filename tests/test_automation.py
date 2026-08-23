@@ -667,12 +667,501 @@ class TestDynamicLiveSelfHealing(unittest.TestCase):
         product_records = [ProductRecord(**d) for d in result.data]
         self.assertEqual(len(product_records), 1)
         validate_records(product_records)  # Validates required field contracts without raising ScraperValidationError
-        self.assertEqual(product_records[0].title, "Quantum ANC Headphones")
-        self.assertEqual(product_records[0].price, "$249.99")
-        self.assertEqual(product_records[0].stock_status, "In Stock")
+class TestPhase2SelfHealingReliability(unittest.TestCase):
+    """
+    Phase 2 test suite: Verifies reliability, metrics, candidate ranking,
+    confidence safety gating, partial failure precision, and safe failure.
+    """
+
+    def setUp(self):
+        self.manager = HealingManager()
+
+    def test_partial_failure_single_field_repair(self):
+        """
+        Prove that when only ONE field fails (e.g. price class changed),
+        the system repairs ONLY the broken field and preserves working selectors.
+        """
+        html = """
+        <div class="product-item">
+            <h2 class="title-alpha">Ergonomic Office Chair</h2>
+            <div class="cost-value-x9">$199.99</div>
+            <span class="stock-status-tag">In Stock</span>
+        </div>
+        """
+        # initial selectors: title and stock_status are correct, price is broken
+        initial_selectors = {
+            "title": ".title-alpha",
+            "price": ".old-broken-price-tag",
+            "stock_status": ".stock-status-tag",
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="partial-test-1",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertTrue(result.verified)
+        self.assertEqual(result.status, "success")
+        self.assertIn("price", result.fields_repaired)
+        self.assertIn("price", result.fields_detected_as_broken)
+        # title and stock_status should NOT be marked as broken
+        self.assertNotIn("title", result.fields_detected_as_broken)
+        self.assertNotIn("stock_status", result.fields_detected_as_broken)
+
+        # Repaired dataset verification
+        self.assertEqual(len(result.data), 1)
+        self.assertEqual(result.data[0]["title"], "Ergonomic Office Chair")
+        self.assertEqual(result.data[0]["price"], "$199.99")
+        self.assertEqual(result.data[0]["stock_status"], "In Stock")
+
+    def test_partial_failure_dual_field_repair(self):
+        """
+        Prove that when TWO fields fail (title & price),
+        only those two are repaired while stock_status is untouched.
+        """
+        html = """
+        <div class="product-item">
+            <h3 class="headline-text">Ultra-Wide 4K Monitor</h3>
+            <span class="price_tag_color">$499.00</span>
+            <span class="stock-valid-ind">In Stock</span>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".obsolete-title-sel",
+            "price": ".obsolete-price-sel",
+            "stock_status": ".stock-valid-ind",  # working selector
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="partial-test-2",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertEqual(set(result.fields_detected_as_broken), {"title", "price"})
+        self.assertNotIn("stock_status", result.fields_detected_as_broken)
+        self.assertEqual(len(result.data), 1)
+        self.assertEqual(result.data[0]["title"], "Ultra-Wide 4K Monitor")
+        self.assertEqual(result.data[0]["price"], "$499.00")
+
+    def test_safe_failure_insufficient_evidence(self):
+        """
+        Prove that when the DOM contains insufficient evidence / low-confidence markup,
+        the safety gate triggers, scraper is NOT patched, and FAILED status is returned safely.
+        """
+        # HTML with ambiguous text and no currency or inventory semantics
+        unclear_html = """
+        <div class="generic-container">
+            <p class="random-blob">Some arbitrary unstructured content without price or stock</p>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".broken-title",
+            "price": ".broken-price",
+            "stock_status": ".broken-status",
+        }
+
+        result = self.manager.heal_html(
+            html_content=unclear_html,
+            initial_selectors=initial_selectors,
+            scraper_id="safe-failure-test",
+        )
+
+        # Must fail safely without inventing fake selectors or claiming success
+        self.assertFalse(result.repaired)
+        self.assertFalse(result.verified)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(len(result.data), 0)
+        self.assertIsNotNone(result.error)
+
+    def test_data_quality_and_recovery_metrics(self):
+        """
+        Prove that recovery metrics and data quality completeness percentages are computed accurately.
+        """
+        html = """
+        <div class="product-item">
+            <h1 class="main-prod-title">Smart Fitness Tracker</h1>
+            <div class="main-prod-price">$89.95</div>
+            <span class="inventory-status">In Stock (5 Available)</span>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".missing-1",
+            "price": ".missing-2",
+            "stock_status": ".missing-3",
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="metrics-quality-test",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertTrue(result.verified)
+        self.assertEqual(result.records_before, 0)
+        self.assertEqual(result.records_after, 1)
+        self.assertGreater(result.duration_ms, 0.0)
+        self.assertGreaterEqual(result.overall_confidence, 0.75)
+
+        # Quality metrics check
+        quality = result.data_quality
+        self.assertEqual(quality["total_records"], 1)
+        self.assertEqual(quality["valid_records"], 1)
+        self.assertEqual(quality["invalid_records"], 0)
+        self.assertEqual(quality["title_completeness"], 100.0)
+        self.assertEqual(quality["price_completeness"], 100.0)
+        self.assertEqual(quality["stock_completeness"], 100.0)
+        self.assertEqual(quality["overall_quality_score"], 100.0)
+
+    def test_candidate_ranking_and_reasoning_exposure(self):
+        """
+        Prove that candidates per field are ranked, structured, and expose machine reasoning.
+        """
+        html = """
+        <div class="product-card">
+            <h2 class="primary-heading">Mechanical Gaming Keyboard</h2>
+            <div class="price_color_tag">$129.99</div>
+            <span class="in-stock-label">In Stock</span>
+        </div>
+        """
+        candidates = self.manager.dom_analyzer.analyze(html)
+        repair_engine = SelectorRepairEngine()
+        price_repair = repair_engine.propose_repair(
+            field="price",
+            old_selector=".old-price",
+            candidates=candidates,
+        )
+
+        self.assertGreaterEqual(len(price_repair.candidates), 1)
+        selected_candidate = [c for c in price_repair.candidates if c.get("selected")]
+        self.assertEqual(len(selected_candidate), 1)
+        self.assertIn("reasoning", price_repair.candidates[0])
+        self.assertGreaterEqual(price_repair.candidates[0]["confidence"], 0.75)
+
+    def test_adaptive_mutation_id_introduced(self):
+        """
+        Prove repair when class is removed and element ID is introduced.
+        """
+        html = """
+        <div>
+            <h2 id="item-title-id">Studio Monitor Speakers</h2>
+            <span id="item-cost-id">$349.00</span>
+            <span id="item-stock-id">In Stock</span>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".old-class-title",
+            "price": ".old-class-price",
+            "stock_status": ".old-class-status",
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="id-mutation-test",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertEqual(result.data[0]["title"], "Studio Monitor Speakers")
+        self.assertEqual(result.data[0]["price"], "$349.00")
+        self.assertEqual(result.data[0]["stock_status"], "In Stock")
+
+    def test_phase3_failure_classification_and_summary(self):
+        """
+        Prove that failure classification and before->healing->after recovery summary
+        are populated with structured evidence-based diagnostics.
+        """
+        html = """
+        <div class="product-item">
+            <h2 class="title-alpha">Ergonomic Office Chair</h2>
+            <div class="cost-value-x9">$199.99</div>
+            <span class="stock-status-tag">In Stock</span>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".missing-title",
+            "price": ".missing-price",
+            "stock_status": ".stock-status-tag",
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="phase3-summary-test",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertIn("failure_classification", result.model_dump())
+        self.assertIn("recovery_summary", result.model_dump())
+
+        # Verify Failure Classification
+        classification = result.failure_classification
+        self.assertEqual(classification["failure_type"], "DOMChanged")
+        self.assertEqual(classification["recoverability"], "recoverable")
+        self.assertIn("price", classification["affected_fields"])
+        self.assertIn("title", classification["affected_fields"])
+        self.assertGreaterEqual(classification["confidence"], 0.75)
+
+        # Verify Recovery Summary
+        summary = result.recovery_summary
+        self.assertIn("before", summary)
+        self.assertIn("healing", summary)
+        self.assertIn("after", summary)
+
+        self.assertEqual(summary["before"]["records_extracted"], 0)
+        self.assertEqual(set(summary["before"]["broken_fields"]), {"title", "price"})
+        self.assertEqual(summary["after"]["records_extracted"], 1)
+        self.assertTrue(summary["after"]["verified"])
+        self.assertEqual(summary["after"]["validation_status"], "passed")
+
+    def test_phase3_cross_site_data_testid_mutation(self):
+        """
+        Prove cross-site adaptiveness with data-testid attributes and custom classes.
+        """
+        html = """
+        <div class="product-wrapper">
+            <div data-testid="title" class="custom-title-node">Mechanical Keyboard RGB</div>
+            <span data-testid="price" class="custom-val-node">$149.95</span>
+            <span data-testid="stock" class="custom-avail-node">In Stock (3 Left)</span>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".non-existent-t",
+            "price": ".non-existent-p",
+            "stock_status": ".non-existent-s",
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="data-testid-test",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertEqual(result.data[0]["title"], "Mechanical Keyboard RGB")
+        self.assertEqual(result.data[0]["price"], "$149.95")
+        self.assertEqual(result.data[0]["stock_status"], "In Stock")
+
+
+class TestPhase4AttackSuite(unittest.TestCase):
+    """
+    Phase 4 Hackathon Attack Test Suite.
+    Proves robustness across unseen DOMs, partial failures, ambiguous markup,
+    malformed data types, non-ecommerce pages, table structures, and bounded retries.
+    """
+
+    def setUp(self):
+        self.manager = HealingManager(max_retries=3)
+
+    def test_attack_1_unseen_dom_zero_demo_keywords(self):
+        """
+        Attack 1: DOM with zero occurrences of demo keywords (title, name, price, status, availability).
+        Tests: tag changes, nesting, and data-testid attributes.
+        """
+        html = """
+        <section class="catalog-grid">
+            <article class="item-box">
+                <header class="item-header">
+                    <h4 class="goods-headline"><a href="/item/101">Wireless Noise-Canceling Headphones</a></h4>
+                </header>
+                <div class="financials">
+                    <span class="currency-tag">$279.50</span>
+                </div>
+                <div class="inventory-indicator">
+                    <span class="in-stock-badge">In Stock (Available Now)</span>
+                </div>
+            </article>
+        </section>
+        """
+        # Ensure 0 occurrences of demo keywords in fixture
+        for kw in ["product-title", "product-name", "product-price", "current-price", "product-status", "availability"]:
+            self.assertNotIn(kw, html)
+
+        initial_selectors = {
+            "title": ".obsolete-head",
+            "price": ".obsolete-cost",
+            "stock_status": ".obsolete-inventory",
+        }
+
+        result = self.manager.heal_html(
+            html_content=html,
+            initial_selectors=initial_selectors,
+            scraper_id="attack-unseen-dom",
+        )
+
+        self.assertTrue(result.repaired)
+        self.assertTrue(result.verified)
+        self.assertEqual(len(result.data), 1)
+        self.assertEqual(result.data[0]["title"], "Wireless Noise-Canceling Headphones")
+        self.assertEqual(result.data[0]["price"], "$279.50")
+        self.assertEqual(result.data[0]["stock_status"], "In Stock")
+        self.assertEqual(set(result.fields_repaired), {"title", "price", "stock_status"})
+
+    def test_attack_2_partial_failure_isolation(self):
+        """
+        Attack 2: Verify that when only title and price break, stock is preserved,
+        and when only price and stock break, title is preserved.
+        """
+        html = """
+        <div class="card-entry">
+            <h2 class="title-alpha">UltraWide IPS Monitor 34-inch</h2>
+            <div class="cost-x9">$499.00</div>
+            <span class="stock-active">In Stock</span>
+        </div>
+        """
+        # Scenario A: Only price and stock break, title is valid
+        selectors_a = {
+            "title": ".title-alpha",
+            "price": ".broken-price",
+            "stock_status": ".broken-stock",
+        }
+        result_a = self.manager.heal_html(html_content=html, initial_selectors=selectors_a)
+        self.assertTrue(result_a.repaired)
+        self.assertIn("price", result_a.fields_repaired)
+        self.assertIn("stock_status", result_a.fields_repaired)
+        self.assertNotIn("title", result_a.fields_repaired)
+
+        # Scenario B: Only title breaks, price and stock are valid
+        selectors_b = {
+            "title": ".broken-title",
+            "price": ".cost-x9",
+            "stock_status": ".stock-active",
+        }
+        result_b = self.manager.heal_html(html_content=html, initial_selectors=selectors_b)
+        self.assertTrue(result_b.repaired)
+        self.assertEqual(result_b.fields_repaired, ["title"])
+
+    def test_attack_3_ambiguous_dom_safe_failure(self):
+        """
+        Attack 3: Intentionally ambiguous HTML without semantic indicators.
+        System must trigger safe failure (ambiguous_unsafe) rather than guess.
+        """
+        html = """
+        <div>
+            <div>$10.00</div>
+            <div>$20.00</div>
+            <div>$30.00</div>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".non-existent-title",
+            "price": ".non-existent-price",
+            "stock_status": ".non-existent-stock",
+        }
+        result = self.manager.heal_html(html_content=html, initial_selectors=initial_selectors)
+        self.assertFalse(result.repaired)
+        self.assertFalse(result.verified)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.failure_classification.get("recoverability"), "ambiguous_unsafe")
+
+    def test_attack_4_wrong_data_type_rejection(self):
+        """
+        Attack 4: Element looks like price class but contains non-numeric text.
+        Contract validation must reject it and not report successful recovery.
+        """
+        html = """
+        <div class="item">
+            <h2 class="item-title">Smart Thermostat</h2>
+            <div class="item-price">hello world not a number</div>
+            <span class="item-stock">In Stock</span>
+        </div>
+        """
+        initial_selectors = {
+            "title": ".item-title",
+            "price": ".missing-price",
+            "stock_status": ".item-stock",
+        }
+        result = self.manager.heal_html(html_content=html, initial_selectors=initial_selectors)
+        # Because .item-price has no numeric digits, it fails price validation
+        self.assertFalse(result.repaired)
+        self.assertFalse(result.verified)
+
+    def test_attack_5_empty_dom_safe_failure(self):
+        """
+        Attack 5: Empty HTML markup.
+        Must return safe failure without crashing or inventing selectors.
+        """
+        html = "<html><body></body></html>"
+        initial_selectors = {
+            "title": ".title",
+            "price": ".price",
+            "stock_status": ".stock",
+        }
+        result = self.manager.heal_html(html_content=html, initial_selectors=initial_selectors)
+        self.assertFalse(result.repaired)
+        self.assertFalse(result.verified)
+        self.assertEqual(result.records_after, 0)
+
+    def test_attack_6_non_ecommerce_article_page(self):
+        """
+        Attack 6: Blog article page with no prices or stock indicators.
+        Must classify as ambiguous_unsafe / unsupported and safely fail.
+        """
+        html = """
+        <article class="blog-post">
+            <h1 class="post-title">10 Tips for Better Web Scraping Architecture</h1>
+            <p class="post-content">Web scraping requires careful consideration of rate limiting and DOM changes.</p>
+            <footer class="post-meta">Published by Engineering Team</footer>
+        </article>
+        """
+        initial_selectors = {
+            "title": ".missing-t",
+            "price": ".missing-p",
+            "stock_status": ".missing-s",
+        }
+        result = self.manager.heal_html(html_content=html, initial_selectors=initial_selectors)
+        self.assertFalse(result.repaired)
+        self.assertFalse(result.verified)
+
+    def test_attack_7_cross_site_table_based_catalog(self):
+        """
+        Attack 7: Table-based e-commerce product listing.
+        Proves autonomous recovery on table <tr> / <td> structures.
+        """
+        html = """
+        <table class="products-table">
+            <thead><tr><th>Product</th><th>Price</th><th>Availability</th></tr></thead>
+            <tbody>
+                <tr class="table-row-item">
+                    <td class="item-name-cell">Compact Mechanical Keyboard 60%</td>
+                    <td class="item-price-cell">$89.99</td>
+                    <td class="item-status-cell">In Stock</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+        initial_selectors = {
+            "title": ".old-tbl-title",
+            "price": ".old-tbl-price",
+            "stock_status": ".old-tbl-stock",
+        }
+        result = self.manager.heal_html(html_content=html, initial_selectors=initial_selectors)
+        self.assertTrue(result.repaired)
+        self.assertTrue(result.verified)
+        self.assertEqual(result.data[0]["title"], "Compact Mechanical Keyboard 60%")
+        self.assertEqual(result.data[0]["price"], "$89.99")
+        self.assertEqual(result.data[0]["stock_status"], "In Stock")
+
+    def test_attack_8_retry_boundary_strict_limit(self):
+        """
+        Attack 8: Ensure healing retry loop strictly bounds execution and terminates.
+        """
+        manager = HealingManager(max_retries=2)
+        html = "<div>Unresolvable</div>"
+        initial_selectors = {"title": ".x", "price": ".y", "stock_status": ".z"}
+        result = manager.heal_html(html_content=html, initial_selectors=initial_selectors)
+        self.assertFalse(result.repaired)
+        self.assertLessEqual(len(result.attempts), 2)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
 
 

@@ -142,15 +142,78 @@ To prevent infinite loops and runaway requests, ScrapeVerse strictly bounds all 
 
 ---
 
+## How ScrapeVerse Self-Heals
+
+ScrapeVerse executes a 7-step autonomous reliability cycle:
+
+1. **Detect**: Identifies broken selectors, missing fields, or empty responses from extraction runs.
+2. **Analyze**: Fetches the live or mutated target DOM and parses tag hierarchy, semantic attributes, currency symbols, and text structure.
+3. **Rank**: Generates ranked candidate selectors per broken field with structured heuristic confidence scores.
+4. **Repair**: Selects the highest-confidence candidate ($\ge 0.75$ safety threshold) or triggers a safe failure if DOM evidence is insufficient.
+5. **Retry**: Re-executes the extraction engine with synthesized selector updates.
+6. **Validate**: Verifies the recovered records against strict Pydantic data contracts (`ProductRecord`).
+7. **Verify**: Computes deterministic data quality metrics (field completeness and valid record ratio) and updates the recovery audit.
+
+---
+
+## Evidence-Based Recovery & Safe Failure (No False Claims)
+
+> [!IMPORTANT]
+> **ScrapeVerse does NOT claim that it can heal every website.**
+> True autonomous reliability requires knowing when to halt safely rather than guessing incorrect selectors.
+
+Failures are classified into distinct tiers:
+- **`recoverable`**: High-confidence replacement candidate identified ($\ge 0.75$) and validated.
+- **`partially_recoverable`**: Subset of broken fields recovered; others flagged.
+- **`ambiguous_unsafe`**: Candidate confidence below safety gate ($< 0.75$) — halts extraction to prevent dirty data ingestion.
+- **`unsupported`**: Target DOM structure does not conform to expected e-commerce contracts.
+
+---
+
+## Real Architecture vs. Controlled Demo
+
+| Feature | Real Production Flow | Controlled Demo Mode |
+|---|---|---|
+| **Data Collection** | Live Bright Data Scraper Studio Collector (`c_mt3d61eq4viqmv3f4`) | Mock E-Commerce Catalog (`mock-site/index.html`) |
+| **DOM Fetching** | Live HTTP extraction of target URL | Local mutated HTML fixture |
+| **DOM Analysis** | Live BeautifulSoup structural parsing | Deterministic multi-mutation testbed |
+| **Candidate Ranking** | Semantic heuristic scoring & ranking | Evaluates candidates against mutated DOM |
+| **Confidence Safety Gate** | Enforced ($0.75$ threshold) | Enforced ($0.75$ threshold) |
+| **Validation** | Pydantic v2 `ProductRecord` contract | Pydantic v2 `ProductRecord` contract |
+| **Trigger in UI** | Target URL + "Run Scraper" / "Self-Healing" | "Simulate Failure (Controlled Demo)" button |
+
+---
+
+## Judge Demo Flow
+
+1. **Live Healthy Scrape**:
+   - Target URL: `https://books.toscrape.com/catalogue/category/books/travel_2/index.html`
+   - Click **"Run Scraper"** $\rightarrow$ Scrapes live via Bright Data Scraper Studio.
+   - Status: **HEALTHY**, all items normalized and displayed.
+2. **Simulate Controlled Failure**:
+   - Click **"Simulate Failure (Controlled Demo)"**.
+   - Selectors break (`.product-title` $\rightarrow$ `.product-name`, `.product-price` $\rightarrow$ `.current-price`, `.product-status` $\rightarrow$ `.availability`).
+   - UI status: **FAILED**, 0 records extracted.
+3. **Trigger Self-Healing Recovery**:
+   - Click **"Self-Healing Recovery"**.
+   - Watch the recovery timeline: Failure Detected $\rightarrow$ DOM Analysis $\rightarrow$ Ranked Candidates $\rightarrow$ Repair $\rightarrow$ Retried $\rightarrow$ Validated.
+   - UI displays Before $\rightarrow$ Healing $\rightarrow$ After audit, Data Quality Breakdown, and Ranked Candidates.
+4. **Live Target Recovery**:
+   - Enter `https://books.toscrape.com/catalogue/category/books/travel_2/index.html` and trigger recovery endpoint:
+     `POST /api/healing/recover?url=...`
+   - ScrapeVerse fetches the live DOM, identifies selectors, extracts books, validates records, and returns full recovery telemetry.
+
+---
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/` | Service health and engine status |
-| `GET` | `/api/scrape` | Execute scraper pipeline (returns 42 normalized records) |
+| `GET` | `/api/scrape` | Execute scraper pipeline with target URL |
 | `GET` | `/api/scrape?fail=true` | Trigger simulated failure for telemetry inspection |
-| `GET` | `/api/healing/status` | System status, mock mode, and retry limit (`MAX_HEALING_ATTEMPTS`) |
-| `POST` | `/api/healing/recover` | Execute unified multi-field self-healing & return recovered dataset |
+| `GET` | `/api/healing/status` | System status, mode, and retry limit (`MAX_HEALING_ATTEMPTS`) |
+| `POST` | `/api/healing/recover` | Execute autonomous self-healing & return recovered dataset |
 | `POST` | `/api/healing/multi-demo` | Multi-selector self-healing demo endpoint |
 | `POST` | `/api/healing/test` | Single-mutation self-healing test endpoint |
 
@@ -188,39 +251,7 @@ Open `http://localhost:5173` in your browser.
 
 ## Running Tests
 
-Run the complete automated test suite (43 unit & integration tests):
+Run the complete automated test suite:
 ```bash
 python -m pytest
 ```
-
-### Test Suite Coverage:
-1. Multi-product mock extraction (42 items)
-2. Complete dataset extraction & contract validation
-3. Data normalization (`normalize_price`, `normalize_title`, `normalize_stock_status`, `normalize_rating`)
-4. Pydantic schema validation & required fields enforcement
-5. Bright Data payload response envelopes
-6. Bright Data asynchronous trigger & exponential backoff polling
-7. Failure detection across single and multi-record datasets
-8. Multiple simultaneous selector failures
-9. Multi-field selector repair proposals & confidence scoring
-10. Bounded retry limit enforcement (`MAX_HEALING_ATTEMPTS`)
-11. Successful multi-field dataset recovery
-12. Failed recovery handling on unrecoverable markup
-13. FastAPI REST API endpoints
-14. Frontend / Backend data contract integrity
-
----
-
-## Demonstration Procedure
-
-1. **Launch Platform**: Start FastAPI backend and Vite frontend. Open `http://localhost:5173`.
-2. **Inspect Pipeline Banner**: View the top 5-stage pipeline: `TARGET WEBSITE` $\rightarrow$ `SCRAPING` $\rightarrow$ `EXTRACTED DATA` $\rightarrow$ `VALIDATION` $\rightarrow$ `HEALTH STATUS`.
-3. **Run Healthy Scrape**: Click **"Run Normal Scraper"**. All 42 products are extracted, normalized, validated, and rendered in the searchable catalog. Status is **HEALTHY**.
-4. **Simulate Website Mutation**: Click **"Simulate Failure"**. The scraper detects 3 broken extraction rules, 0 records extracted, and marks status as **SELECTOR BROKEN**.
-5. **Execute Unified Self-Healing**: Click **"Self-Healing Recovery"**. Watch the 7-step visual timeline:
-   - DOM structure analyzed
-   - Multi-field repair matrix generated (`.product-title` $\rightarrow$ `.product-name`, `.product-price` $\rightarrow$ `.current-price`, `.product-status` $\rightarrow$ `.availability`)
-   - Scraper retried with repaired selectors
-   - Complete 42-product dataset restored and validated
-   - Health status returned to **HEALTHY**
-6. **Inspect Audit Telemetry**: Click **"Inspect JSON"** or switch to the **"Repair Matrix"** tab to review the complete diagnostic payload and AI confidence scores.

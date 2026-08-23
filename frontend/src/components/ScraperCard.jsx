@@ -106,10 +106,10 @@ export default function ScraperCard({
             className="btn btn-danger"
             onClick={onSimulateFailure}
             disabled={isRunning}
-            title="Simulate website structure changes breaking selectors"
+            title="Simulate website structure changes breaking selectors (Controlled Demo)"
           >
             <AlertTriangle size={16} />
-            <span>Simulate Failure</span>
+            <span>Simulate Failure (Controlled Demo)</span>
           </button>
         </div>
 
@@ -118,7 +118,7 @@ export default function ScraperCard({
             className="btn btn-ai-unified"
             onClick={onTriggerHealing}
             disabled={isRunning}
-            title="Execute unified AI self-healing recovery across all broken selectors"
+            title="Execute evidence-based autonomous recovery across all broken selectors from target DOM"
           >
             <Sparkles size={16} className="text-cyan animate-pulse" />
             <span>Self-Healing Recovery</span>

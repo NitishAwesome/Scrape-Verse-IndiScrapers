@@ -45,6 +45,7 @@ class SelectorRepairEngine:
         field: str,
         old_selector: str | None,
         candidates: Sequence[DOMCandidate] | None = None,
+        limit: int = 5,
     ) -> list[SelectorRepair]:
         """
         Return a ranked list of candidate repairs for a field exceeding confidence_threshold.
@@ -55,13 +56,13 @@ class SelectorRepairEngine:
 
         matching = [
             c for c in candidates
-            if c.field_hint == field and c.confidence >= self.confidence_threshold
+            if c.field_hint == field
         ]
 
         matching.sort(key=lambda c: c.confidence, reverse=True)
 
         repairs: list[SelectorRepair] = []
-        for c in matching:
+        for c in matching[:limit]:
             reason = (
                 c.reasoning
                 or f"Identified replacement DOM element <{c.tag}> with selector '{c.suggested_selector}' (confidence: {c.confidence:.2f})"
@@ -87,35 +88,93 @@ class SelectorRepairEngine:
         reason_hint: str | None = None,
     ) -> SelectorRepair:
         """
-        Generate the top SelectorRepair proposal for a broken field.
+        Generate the top SelectorRepair proposal for a broken field, attaching ranked candidate details.
         """
         effective_old = old_selector or f".product-{field.replace('_', '-')}"
 
         # 1. Evaluate DOM candidates if available
-        if candidates:
-            ranked = self.propose_candidates_ranked(
-                field=field,
-                old_selector=effective_old,
-                candidates=candidates,
-            )
-            if ranked:
-                # Prefer candidate with different selector than broken old_selector
-                best = ranked[0]
-                for r in ranked:
-                    if r.new_selector != effective_old:
-                        best = r
+        if candidates is not None:
+            matching = [c for c in candidates if c.field_hint == field]
+            matching.sort(key=lambda c: c.confidence, reverse=True)
+
+            if matching:
+                best_candidate = matching[0]
+                # If best candidate is below safety threshold, enforce safety gate
+                if best_candidate.confidence < self.confidence_threshold:
+                    logger.warning(
+                        "Candidate for '%s' (%s) below confidence threshold (%.2f < %.2f)",
+                        field,
+                        best_candidate.suggested_selector,
+                        best_candidate.confidence,
+                        self.confidence_threshold,
+                    )
+                    candidate_dicts = [
+                        {
+                            "selector": c.suggested_selector,
+                            "confidence": c.confidence,
+                            "selected": False,
+                            "reasoning": c.reasoning or f"Candidate score {c.confidence:.2f} below safety threshold",
+                        }
+                        for c in matching[:5]
+                    ]
+                    return SelectorRepair(
+                        field=field,
+                        old_selector=effective_old,
+                        new_selector=effective_old,
+                        confidence=best_candidate.confidence,
+                        reasoning=f"Best candidate '{best_candidate.suggested_selector}' confidence ({best_candidate.confidence:.2f}) is below safety threshold ({self.confidence_threshold:.2f})",
+                        candidates=candidate_dicts,
+                    )
+
+                # Find top candidate different from broken old_selector if possible
+                chosen_candidate = best_candidate
+                for c in matching:
+                    if c.suggested_selector != effective_old and c.confidence >= self.confidence_threshold:
+                        chosen_candidate = c
                         break
+
+                candidate_dicts = [
+                    {
+                        "selector": c.suggested_selector,
+                        "confidence": c.confidence,
+                        "selected": c.suggested_selector == chosen_candidate.suggested_selector,
+                        "reasoning": c.reasoning or f"Matched heuristic with confidence {c.confidence:.2f}",
+                    }
+                    for c in matching[:5]
+                ]
+
+                chosen_reason = (
+                    chosen_candidate.reasoning
+                    or f"Identified replacement DOM element <{chosen_candidate.tag}> with selector '{chosen_candidate.suggested_selector}' (confidence: {chosen_candidate.confidence:.2f})"
+                )
 
                 logger.info(
                     "Proposing selector repair for %s: %s -> %s (confidence: %.2f)",
                     field,
                     effective_old,
-                    best.new_selector,
-                    best.confidence,
+                    chosen_candidate.suggested_selector,
+                    chosen_candidate.confidence,
                 )
-                return best
+                return SelectorRepair(
+                    field=field,
+                    old_selector=effective_old,
+                    new_selector=chosen_candidate.suggested_selector,
+                    confidence=chosen_candidate.confidence,
+                    reasoning=chosen_reason,
+                    candidates=candidate_dicts,
+                )
+            else:
+                # Candidates list provided, but zero matching elements found for this field
+                return SelectorRepair(
+                    field=field,
+                    old_selector=effective_old,
+                    new_selector=effective_old,
+                    confidence=0.0,
+                    reasoning=f"No viable replacement element discovered exceeding confidence threshold ({self.confidence_threshold:.2f}) for '{field}'",
+                    candidates=[],
+                )
 
-        # 2. Deterministic / MOCK_LLM fallback heuristics
+        # 2. Deterministic / MOCK_LLM fallback heuristics (only when no candidates list provided)
         if self.mock_mode:
             fallback_selector, fallback_conf, fallback_reason = self._deterministic_proposal(field, effective_old)
             return SelectorRepair(
@@ -124,6 +183,14 @@ class SelectorRepairEngine:
                 new_selector=fallback_selector,
                 confidence=fallback_conf,
                 reasoning=fallback_reason,
+                candidates=[
+                    {
+                        "selector": fallback_selector,
+                        "confidence": fallback_conf,
+                        "selected": True,
+                        "reasoning": fallback_reason,
+                    }
+                ],
             )
 
         # 3. No candidate meeting threshold
@@ -133,6 +200,7 @@ class SelectorRepairEngine:
             new_selector=effective_old,
             confidence=0.0,
             reasoning=f"No viable replacement element discovered exceeding confidence threshold ({self.confidence_threshold:.2f}) for '{field}'",
+            candidates=[],
         )
 
     def _deterministic_proposal(self, field: str, old_selector: str) -> tuple[str, float, str]:

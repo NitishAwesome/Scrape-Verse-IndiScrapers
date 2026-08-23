@@ -109,11 +109,12 @@ def _build_unified_payload(
                 "old_selector": r.old_selector,
                 "new_selector": r.new_selector,
                 "confidence": r.confidence,
-                "status": "HEALED" if healing_result.repaired else "FAILED",
+                "status": "HEALED" if (healing_result.repaired and r.confidence >= _healing_manager.repair_engine.confidence_threshold) else "FAILED",
                 "extracted_value": field_value_map.get(r.field, "Extracted Value"),
                 "attempt": corresponding_attempt.retry_count if corresponding_attempt else idx + 1,
                 "validation_result": corresponding_attempt.validation_result if corresponding_attempt else healing_result.repaired,
                 "reasoning": r.reasoning or f"Dynamic DOM candidate matched with {int(r.confidence * 100)}% confidence",
+                "candidates": r.candidates,
             }
         )
 
@@ -121,7 +122,7 @@ def _build_unified_payload(
     first_repair = healing_result.selector_repairs[0] if healing_result.selector_repairs else None
     last_event = healing_result.attempts[-1] if healing_result.attempts else None
 
-    validation_state = "passed" if healing_result.repaired else "failed"
+    validation_state = "passed" if (healing_result.repaired and healing_result.verified) else "failed"
     message_text = (
         healing_result.error
         if healing_result.error and not healing_result.repaired
@@ -132,8 +133,8 @@ def _build_unified_payload(
         )
     )
 
-    failures_count = len(healing_result.selector_repairs) or (1 if not healing_result.repaired else 0)
-    selectors_repaired_count = len(healing_result.selector_repairs) if healing_result.repaired else 0
+    failures_count = len(healing_result.fields_detected_as_broken) or len(healing_result.selector_repairs) or (1 if not healing_result.repaired else 0)
+    selectors_repaired_count = len(healing_result.fields_repaired) if healing_result.repaired else 0
 
     return {
         "status": healing_result.status,
@@ -142,10 +143,20 @@ def _build_unified_payload(
         "selectors_repaired": selectors_repaired_count,
         "attempts": len(healing_result.attempts),
         "validation": validation_state,
-        "validation_result": healing_result.repaired,
+        "validation_result": healing_result.repaired and healing_result.verified,
         "records_extracted": len(final_data),
         "records_recovered": len(final_data) if healing_result.repaired else 0,
-        "overall_status": "FULLY HEALED" if healing_result.repaired else "FAILED",
+        "records_before": healing_result.records_before,
+        "records_after": healing_result.records_after,
+        "fields_detected_as_broken": healing_result.fields_detected_as_broken,
+        "fields_repaired": healing_result.fields_repaired,
+        "overall_confidence": healing_result.overall_confidence,
+        "duration_ms": healing_result.duration_ms,
+        "verified": healing_result.verified,
+        "data_quality": healing_result.data_quality,
+        "failure_classification": healing_result.failure_classification,
+        "recovery_summary": healing_result.recovery_summary,
+        "overall_status": "FULLY HEALED" if (healing_result.repaired and healing_result.verified) else "FAILED",
         "failure_type": first_event.failure_type if first_event else ("SelectorNotFound" if not healing_result.repaired else "ValidationError"),
         "old_selector": first_repair.old_selector if first_repair else None,
         "new_selector": first_repair.new_selector if first_repair else None,
