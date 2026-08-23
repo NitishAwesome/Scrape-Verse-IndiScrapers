@@ -363,8 +363,9 @@ ScrapeGuard enforces explicit reliability boundaries:
 
 In accordance with the hackathon guidelines, AI coding assistance was leveraged transparently during the development of ScrapeGuard:
 
-- **Google Antigravity**: Used as the primary AI coding assistant for project scaffolding, test generation, edge-case analysis, architectural review, and documentation formatting.
-- **Development Workflow**: All AI-suggested implementations, DOM heuristics, test suites, and frontend components were reviewed, debugged, and verified through automated tests (`pytest`, `npm run build`) and live browser sessions.
+* **Google Antigravity**: Used as the primary AI coding assistant for project scaffolding, test generation, edge-case analysis, architectural review, and documentation formatting.
+* **ChatGPT**: Utilized for brainstorming project concepts, drafting and refining public build logs (LinkedIn updates), and shaping user-facing documentation and video script outlines.
+* **Development Workflow**: All AI-suggested implementations, DOM heuristics, test suites, and frontend components were reviewed, debugged, and verified through automated tests (`pytest`, `npm run build`) and live browser sessions.
 
 *All system architecture, safety gating logic, Pydantic contracts, and Bright Data integration were designed, tested, and validated as part of the development process.*
 
