@@ -10,7 +10,7 @@
 
 **A self-healing web scraping system that detects broken extraction rules, analyzes website changes, repairs them automatically, and verifies the recovered data.**
 
-[🐛 GitHub Repository](https://github.com/NitishAwesome/Scrape-Verse-IndiScrapers)
+[ GitHub Repository](https://github.com/NitishAwesome/Scrape-Verse-IndiScrapers)
 
 </div>
 
