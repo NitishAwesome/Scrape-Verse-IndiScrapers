@@ -44,7 +44,7 @@ class _MultiProductHTMLParser(HTMLParser):
                 "rating": attr_dict.get("data-rating"),
                 "category": attr_dict.get("data-category"),
                 "product_url": None,
-                "product_id": attr_dict.get("data-product-id"),
+                "product_id": attr_dict.get("data-product-id") or attr_dict.get("data-sku") or attr_dict.get("data-id") or None,
             }
             return
         elif self._card_depth > 0:

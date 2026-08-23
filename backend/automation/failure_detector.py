@@ -1,4 +1,4 @@
-"""Failure detection engine for the ScrapeVerse self-healing system."""
+"""Failure detection engine for the ScrapeGuard self-healing system."""
 
 import logging
 import re

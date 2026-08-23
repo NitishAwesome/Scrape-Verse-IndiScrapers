@@ -17,7 +17,8 @@ import {
   ArrowRight,
   TrendingUp,
   Sliders,
-  AlertOctagon
+  AlertOctagon,
+  Info
 } from 'lucide-react';
 
 export default function UnifiedDataRepairPanel({
@@ -51,7 +52,7 @@ export default function UnifiedDataRepairPanel({
     healingInfo.overall_status === 'SAFE_FAILURE'
   );
 
-  // Quality score determination
+  // Quality score determination (Refers strictly to required extraction contract: title, price, stock_status)
   const getQualityScoreDisplay = () => {
     if (isFailed || data.length === 0) {
       return isHealed ? '0%' : (isFailed ? '0%' : '—');
@@ -126,12 +127,14 @@ export default function UnifiedDataRepairPanel({
     ? 'SAFE FAILURE' 
     : (isHealed && healingInfo?.verified ? 'FULLY HEALED' : (isFailed ? 'FAILED' : 'HEALTHY'));
 
-  // Filter dataset
+  // Filter dataset based on genuine scraped values
   const filteredData = (data || []).filter((item) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
       (item.title && item.title.toLowerCase().includes(term)) ||
+      (item.price && item.price.toLowerCase().includes(term)) ||
+      (item.stock_status && item.stock_status.toLowerCase().includes(term)) ||
       (item.category && item.category.toLowerCase().includes(term)) ||
       (item.product_id && item.product_id.toLowerCase().includes(term))
     );
@@ -226,8 +229,8 @@ export default function UnifiedDataRepairPanel({
           <span className="summary-val val-neutral">{healingInfo?.duration_ms ? `${healingInfo.duration_ms}ms` : '—'}</span>
         </div>
         <div className="summary-divider" />
-        <div className="summary-item">
-          <span className="summary-label">Quality Score</span>
+        <div className="summary-item" title="Evaluates 100% schema completeness across required fields (title, price, stock_status)">
+          <span className="summary-label">Contract Quality Score</span>
           <span className={`summary-val font-mono ${isFailed || data.length === 0 ? 'val-danger' : 'val-success'}`}>
             {getQualityScoreDisplay()}
           </span>
@@ -332,7 +335,7 @@ export default function UnifiedDataRepairPanel({
                 {data.length} records recovered
               </div>
               <div className="flow-card-meta">
-                <div>Quality Score: <strong className={isFailed || data.length === 0 ? 'meta-val-red' : 'meta-val-green'}>{getQualityScoreDisplay()}</strong></div>
+                <div>Contract Quality: <strong className={isFailed || data.length === 0 ? 'meta-val-red' : 'meta-val-green'}>{getQualityScoreDisplay()}</strong> <span className="text-[10px] text-muted">(Required: title, price, stock)</span></div>
                 <div>Schema Contract: <span className="meta-val-mono">ProductRecord (Strict)</span></div>
                 <div>Integrity Check: <span className={isHealed ? 'meta-val-green' : 'meta-val-mono'}>{isHealed ? '100% Normalized' : (isFailed ? '0 Records' : 'Verified')}</span></div>
               </div>
@@ -344,7 +347,7 @@ export default function UnifiedDataRepairPanel({
             <div className="quality-breakdown-card">
               <div className="quality-breakdown-title">
                 <TrendingUp size={14} className="text-cyan" />
-                <span>Deterministic Data Quality Breakdown</span>
+                <span>Deterministic Data Quality Breakdown (Required Contract Fields)</span>
               </div>
               <div className="quality-metrics-row">
                 <div className="quality-stat-box">
@@ -364,6 +367,10 @@ export default function UnifiedDataRepairPanel({
                   <div className="quality-stat-val text-emerald">{dataQuality.valid_record_ratio ?? 100}%</div>
                 </div>
               </div>
+              <div className="text-[11px] text-muted flex items-center gap-1.5 mt-1">
+                <Info size={13} className="text-cyan shrink-0" />
+                <span>Quality Score measures strict schema validation & completeness across required fields (title, price, stock_status). Optional fields are preserved if provided by target DOM without fabrication.</span>
+              </div>
             </div>
           )}
         </div>
@@ -377,7 +384,7 @@ export default function UnifiedDataRepairPanel({
               <Search size={14} className="text-muted" />
               <input 
                 type="text" 
-                placeholder="Search products by title, category, or ID..." 
+                placeholder="Search products by title, price, or stock status..." 
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               />
@@ -394,9 +401,9 @@ export default function UnifiedDataRepairPanel({
                   <th>Product Title</th>
                   <th>Price</th>
                   <th>Stock Status</th>
-                  <th>Category</th>
                   <th>Rating</th>
-                  <th>Product ID</th>
+                  <th>Category</th>
+                  <th>Product ID / SKU</th>
                 </tr>
               </thead>
               <tbody>
@@ -416,7 +423,7 @@ export default function UnifiedDataRepairPanel({
                   </tr>
                 ) : paginatedData.length > 0 ? (
                   paginatedData.map((item, idx) => (
-                    <tr key={item.product_id || idx} className={isHealed ? 'row-healed' : ''}>
+                    <tr key={item.product_id || item.product_url || idx} className={isHealed ? 'row-healed' : ''}>
                       <td className="product-title-cell font-medium">
                         <div className="product-title-group">
                           <ShoppingBag size={14} className="text-cyan" />
@@ -429,9 +436,13 @@ export default function UnifiedDataRepairPanel({
                           <CheckCircle2 size={11} /> {item.stock_status || 'In Stock'}
                         </span>
                       </td>
-                      <td className="text-muted text-xs">{item.category || 'General'}</td>
-                      <td className="text-amber text-xs font-mono">{item.rating ? `★ ${item.rating}` : '—'}</td>
-                      <td className="text-muted text-xs font-mono">{item.product_id || `rec_${idx + 1}`}</td>
+                      <td className="text-amber text-xs font-mono">{item.rating != null ? `★ ${item.rating}` : '—'}</td>
+                      <td className="text-muted text-xs">
+                        {item.category ? item.category : <span className="text-slate-600 font-mono">—</span>}
+                      </td>
+                      <td className="text-muted text-xs font-mono">
+                        {item.product_id ? item.product_id : <span className="text-slate-600 font-mono">—</span>}
+                      </td>
                     </tr>
                   ))
                 ) : (

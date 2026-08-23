@@ -1,5 +1,5 @@
 """
-ScrapeVerse scraping module — public exports for Person 2 and FastAPI routes.
+ScrapeGuard scraping module — public exports for Person 2 and FastAPI routes.
 
 Usage:
     from backend.scraper import ScraperService, run_scrape

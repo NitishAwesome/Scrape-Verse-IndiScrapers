@@ -1,4 +1,4 @@
-"""AI and rule-based selector repair engine for ScrapeVerse."""
+"""AI and rule-based selector repair engine for ScrapeGuard."""
 
 import logging
 import os

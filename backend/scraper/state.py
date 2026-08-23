@@ -1,4 +1,4 @@
-"""Runtime extraction state and configuration management for ScrapeVerse."""
+"""Runtime extraction state and configuration management for ScrapeGuard."""
 
 import logging
 from typing import Any

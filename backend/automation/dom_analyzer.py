@@ -407,6 +407,103 @@ class DOMAnalyzer:
 
         return []
 
+    def _extract_page_category(self, parser: _DOMElementParser) -> str | None:
+        """
+        Dynamically extract category name from the HTML page DOM.
+
+        Inspects standard e-commerce semantic patterns:
+        1. Breadcrumbs (<ul class="breadcrumb">, [itemtype*="BreadcrumbList"], nav.breadcrumb)
+        2. Category / Page Headings (.page-header h1, .category-title, .page-title)
+        3. Active Navigation Filters (.side_categories li.active, .nav-list li.active)
+
+        Returns clean category string if found; otherwise None. Never hardcodes site categories.
+        """
+        generic_roots = {"home", "all", "index", "catalog", "products", "store", "books", "shop", "items", "categories", "category", "default"}
+
+        # 1. Breadcrumbs
+        breadcrumb_items: list[str] = []
+        for elem in parser.elements:
+            classes = elem.get("classes", [])
+            parent_classes = elem.get("parent_classes", [])
+            is_bc = any("breadcrumb" in c.lower() for c in classes + parent_classes)
+            if is_bc and elem["tag"] in {"li", "a", "span"}:
+                text = " ".join(elem["text_parts"]).strip()
+                if text and text.lower() not in generic_roots and len(text) <= 40 and not text.isdigit():
+                    breadcrumb_items.append(text)
+
+        if breadcrumb_items:
+            return breadcrumb_items[-1].strip().title()
+
+        # 2. Page Header / Category Title
+        heading_indicators = {
+            "page-header", "category-title", "page-title", "collection-title",
+            "category-name", "catalog-title", "category_header", "genre-title",
+        }
+        for elem in parser.elements:
+            classes = elem.get("classes", [])
+            parent_classes = elem.get("parent_classes", [])
+            tag = elem["tag"]
+            is_header = any(ind in c.lower() for ind in heading_indicators for c in classes + parent_classes)
+            if is_header or (tag in {"h1", "h2"} and any(ind in c.lower() for ind in heading_indicators for c in parent_classes)):
+                text = " ".join(elem["text_parts"]).strip()
+                if text and text.lower() not in generic_roots and len(text) <= 40 and "\n" not in text and not text.isdigit():
+                    return text.strip().title()
+
+        # 3. Active Navigation Filter
+        for elem in parser.elements:
+            classes = elem.get("classes", [])
+            is_active = any(c.lower() in {"active", "selected", "current"} for c in classes)
+            parent_classes = elem.get("parent_classes", [])
+            is_nav = any(n in c.lower() for n in {"nav", "side", "category", "categories", "menu", "sidebar"} for c in parent_classes)
+            if is_active and is_nav and elem["tag"] in {"li", "a", "span"}:
+                text = " ".join(elem["text_parts"]).strip()
+                if text and text.lower() not in generic_roots and len(text) <= 40 and not text.isdigit():
+                    return text.strip().title()
+
+        return None
+
+    def _extract_card_product_id(
+        self,
+        card_elements: list[dict[str, Any]],
+        product_url: str | None,
+    ) -> str | None:
+        """
+        Extract genuine product identifier from card element attributes or product URL.
+        Returns None if no unambiguous identifier is present. Never fabricates sequence numbers.
+        """
+        sku_attrs = ["data-product-id", "data-sku", "data-id", "data-item-id", "data-pid", "data-itemid"]
+
+        for elem in card_elements:
+            attrs = elem.get("attributes", {})
+            for key in sku_attrs:
+                val = attrs.get(key)
+                if val and val.strip():
+                    return str(val).strip()
+
+            if attrs.get("itemprop") in {"sku", "productID"} and attrs.get("content"):
+                return str(attrs["content"]).strip()
+
+            element_id = elem.get("element_id")
+            if element_id:
+                m = re.search(r"^(?:product|item|sku)[-_](\w+)$", element_id, re.IGNORECASE)
+                if m:
+                    return m.group(1).strip()
+
+        if product_url:
+            m_slug_id = re.search(r"[a-z0-9-]+_(\d+)(?:/index)?\.html", product_url, re.IGNORECASE)
+            if m_slug_id:
+                return m_slug_id.group(1).strip()
+
+            m_path_id = re.search(r"/(?:p|product|item|dp)/([A-Za-z0-9-_]+)", product_url, re.IGNORECASE)
+            if m_path_id:
+                return m_path_id.group(1).strip()
+
+            m_query_id = re.search(r"[?&](?:id|sku|product_id|pid)=([A-Za-z0-9-_]+)", product_url, re.IGNORECASE)
+            if m_query_id:
+                return m_query_id.group(1).strip()
+
+        return None
+
     def _extract_generalized_catalog(
         self,
         html_content: str,
@@ -418,6 +515,9 @@ class DOMAnalyzer:
             parser.feed(html_content)
         except Exception:
             return []
+
+        # Extract page-level category if present in DOM (breadcrumbs, header, active filter)
+        page_category = self._extract_page_category(parser)
 
         # Look for container items like <article class="product_pod">, <div class="product-card">, <li>
         cards: list[list[dict[str, Any]]] = []
@@ -454,7 +554,7 @@ class DOMAnalyzer:
                 "price": "",
                 "stock_status": "",
                 "rating": None,
-                "category": None,
+                "category": page_category,
                 "product_url": None,
                 "product_id": None,
             }
@@ -468,6 +568,12 @@ class DOMAnalyzer:
                 classes = elem["classes"]
                 element_id = elem["element_id"]
                 attrs = elem["attributes"]
+
+                # Extract card-level category if explicitly tagged
+                if attrs.get("data-category"):
+                    record["category"] = attrs["data-category"].strip().title()
+                elif any("category" in c for c in classes) and text and len(text) <= 40:
+                    record["category"] = text.strip().title()
 
                 # Extract product link
                 if tag == "a" and attrs.get("href") and not record["product_url"]:
@@ -505,6 +611,9 @@ class DOMAnalyzer:
 
                     if matched and text and not record.get(field):
                         record[field] = text
+
+            # Extract product ID if discoverable from card elements or link
+            record["product_id"] = self._extract_card_product_id(card_elements, record.get("product_url"))
 
             if record.get("title") or record.get("price"):
                 records.append(record)

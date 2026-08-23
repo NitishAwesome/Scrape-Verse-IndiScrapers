@@ -1238,8 +1238,106 @@ class TestDemoFlowLifecycle(unittest.TestCase):
         self.assertEqual(status_data["confidence_threshold"], 0.75)
 
 
+class TestDynamicCategoryAndSKUExtraction(unittest.TestCase):
+    """Tests proving that category and product ID are extracted dynamically from DOM without hardcoded values."""
+
+    def setUp(self):
+        self.analyzer = DOMAnalyzer()
+
+    def test_dynamic_category_extracted_from_breadcrumbs(self):
+        """Verify dynamic category extraction from breadcrumb tree."""
+        html = """
+        <html>
+          <body>
+            <ul class="breadcrumb">
+              <li><a href="/">Home</a></li>
+              <li><a href="/books">Books</a></li>
+              <li class="active">Travel</li>
+            </ul>
+            <ol>
+              <li>
+                <article class="product_pod">
+                  <h3><a href="catalogue/italy_101/index.html">Travel to Italy</a></h3>
+                  <p class="price_color">£24.99</p>
+                  <p class="instock availability">In Stock</p>
+                </article>
+              </li>
+            </ol>
+          </body>
+        </html>
+        """
+        selectors = {"title": "h3 a", "price": ".price_color", "stock_status": ".instock.availability"}
+        records = self.analyzer.extract_all_with_selectors(html, selectors)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["title"], "Travel to Italy")
+        self.assertEqual(records[0]["category"], "Travel")
+        self.assertEqual(records[0]["product_id"], "101")
+
+    def test_dynamic_category_not_hardcoded_different_genre(self):
+        """Verify category is dynamic by extracting Mystery without hardcoded Travel dependency."""
+        html = """
+        <html>
+          <body>
+            <div class="page-header">
+              <h1>Mystery & Suspense</h1>
+            </div>
+            <div class="product-item">
+              <h2 class="title">The Silent Witness</h2>
+              <div class="price">$14.50</div>
+              <span class="stock">In Stock</span>
+              <a href="/books/silent-witness_442/index.html">Details</a>
+            </div>
+          </body>
+        </html>
+        """
+        selectors = {"title": ".title", "price": ".price", "stock_status": ".stock"}
+        records = self.analyzer.extract_all_with_selectors(html, selectors)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["category"], "Mystery & Suspense")
+        self.assertEqual(records[0]["product_id"], "442")
+
+    def test_missing_category_and_product_id_remain_none(self):
+        """Verify that when category or product_id are absent, they stay None (never fake values)."""
+        html = """
+        <html>
+          <body>
+            <div class="item-card">
+              <h4 class="name">Generic Widget</h4>
+              <span class="cost">$9.99</span>
+              <p class="status">Available</p>
+            </div>
+          </body>
+        </html>
+        """
+        selectors = {"title": ".name", "price": ".cost", "stock_status": ".status"}
+        records = self.analyzer.extract_all_with_selectors(html, selectors)
+        self.assertEqual(len(records), 1)
+        self.assertIsNone(records[0]["category"], "Must remain None when no category in DOM")
+        self.assertIsNone(records[0]["product_id"], "Must remain None when no SKU in DOM")
+
+    def test_data_sku_attribute_extraction(self):
+        """Verify explicit data-sku or data-product-id attributes are preserved."""
+        html = """
+        <html>
+          <body>
+            <div class="product-card" data-sku="SKU-NEO-99" data-category="Gaming Keyboards">
+              <h3 class="product-title">Neo Mech 80</h3>
+              <div class="product-price">$129.00</div>
+              <div class="product-status">In Stock</div>
+            </div>
+          </body>
+        </html>
+        """
+        selectors = {"title": ".product-title", "price": ".product-price", "stock_status": ".product-status"}
+        records = self.analyzer.extract_all_with_selectors(html, selectors)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["category"], "Gaming Keyboards")
+        self.assertEqual(records[0]["product_id"], "SKU-NEO-99")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

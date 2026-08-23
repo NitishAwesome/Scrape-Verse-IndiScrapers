@@ -1,5 +1,5 @@
 /**
- * ScrapeVerse API Client Service
+ * ScrapeGuard API Client Service
  * Interacts with FastAPI backend endpoints:
  * - GET  /api/scrape
  * - GET  /api/scrape?fail=true

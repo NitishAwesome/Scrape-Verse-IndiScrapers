@@ -10,7 +10,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-app = FastAPI(title="ScrapeVerse Backend Engine")
+app = FastAPI(title="ScrapeGuard Backend Engine")
 app.include_router(healing_router)
 
 scraper_service = ScraperService()
@@ -18,7 +18,7 @@ scraper_service = ScraperService()
 
 @app.get("/")
 def root():
-    return {"status": "online", "message": "ScrapeVerse Engine Active"}
+    return {"status": "online", "message": "ScrapeGuard Engine Active"}
 
 
 @app.get("/api/scrape")

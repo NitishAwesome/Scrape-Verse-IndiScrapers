@@ -1,5 +1,5 @@
 """
-ScrapeVerse Automation & Self-Healing Module.
+ScrapeGuard Automation & Self-Healing Module.
 
 Exposes data models, engines, and FastAPI router for failure detection,
 DOM analysis, selector repair, and healing management.

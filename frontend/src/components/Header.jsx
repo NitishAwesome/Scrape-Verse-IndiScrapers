@@ -20,10 +20,10 @@ export default function Header({ isConnected, onRefresh, isRefreshing }) {
         </div>
         <div className="logo-text-group">
           <div className="logo-title-row">
-            <h1 className="logo-title">ScrapeVerse</h1>
+            <h1 className="logo-title">ScrapeGuard</h1>
             <span className="badge badge-emerald">v2.4 Live</span>
           </div>
-          <p className="logo-subtitle">Self-Healing Web Scraping Platform • Powered by Bright Data</p>
+          <p className="logo-subtitle">Self-Healing Web Scraping • Powered by Bright Data</p>
         </div>
       </div>
 

@@ -337,5 +337,54 @@ class TestBrightDataClient(unittest.TestCase):
         self.assertEqual(records[0]["title"], "Batch Item")
 
 
+class TestDataIntegrityAndFieldPreservation(unittest.TestCase):
+    """Tests proving that optional fields (category, product_id) are never fabricated with fake defaults."""
+
+    def test_null_category_and_product_id_remain_none(self):
+        """Verify that missing category and product_id remain None without fake fallbacks."""
+        raw_record = {
+            "title": "Clean Code",
+            "price": "$45.00",
+            "stock_status": "In Stock",
+        }
+        normalized = normalize_record(raw_record)
+        self.assertEqual(normalized.title, "Clean Code")
+        self.assertEqual(normalized.price, "$45.00")
+        self.assertEqual(normalized.stock_status, "In Stock")
+        self.assertIsNone(normalized.category, "Category must be None when absent, not 'General'")
+        self.assertIsNone(normalized.product_id, "Product ID must be None when absent, not 'rec_1'")
+
+    def test_real_category_and_product_id_are_preserved(self):
+        """Verify that genuine category and product_id from upstream sources are preserved."""
+        raw_record = {
+            "title": "A Light in the Attic",
+            "price": "$51.77",
+            "stock_status": "In Stock",
+            "category": "Poetry",
+            "product_id": "book_a_light_in_the_attic_1000",
+            "rating": 3.0,
+            "product_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+        }
+        normalized = normalize_record(raw_record)
+        self.assertEqual(normalized.category, "Poetry")
+        self.assertEqual(normalized.product_id, "book_a_light_in_the_attic_1000")
+        self.assertEqual(normalized.rating, 3.0)
+
+    def test_quality_score_focuses_on_required_contract_fields(self):
+        """Verify that quality score computes 100% when required fields pass, even if optional fields are None."""
+        from backend.automation.healing_manager import calculate_data_quality
+
+        records = [
+            {"title": "Book A", "price": "$10.00", "stock_status": "In Stock", "category": None, "product_id": None},
+            {"title": "Book B", "price": "$20.00", "stock_status": "In Stock", "category": None, "product_id": None},
+        ]
+        quality = calculate_data_quality(records)
+        self.assertEqual(quality["title_completeness"], 100.0)
+        self.assertEqual(quality["price_completeness"], 100.0)
+        self.assertEqual(quality["stock_completeness"], 100.0)
+        self.assertEqual(quality["valid_record_ratio"], 100.0)
+        self.assertEqual(quality["overall_quality_score"], 100.0)
+
+
 if __name__ == "__main__":
     unittest.main()

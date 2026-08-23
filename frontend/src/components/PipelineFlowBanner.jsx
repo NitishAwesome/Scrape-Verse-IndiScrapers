@@ -56,7 +56,7 @@ export default function PipelineFlowBanner({ status, recordCount = 0, isHealing 
     <div className="pipeline-flow-container glass-panel">
       <div className="pipeline-flow-header">
         <span className="pipeline-title">END-TO-END DATA PIPELINE ARCHITECTURE</span>
-        <span className="pipeline-role-tag">ScrapeVerse Self-Healing Orchestration Layer</span>
+        <span className="pipeline-role-tag">ScrapeGuard Self-Healing Orchestration Layer</span>
       </div>
       <div className="pipeline-steps-row">
         {steps.map((step, idx) => {
