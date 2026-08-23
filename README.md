@@ -1,11 +1,38 @@
-# 🛡️ ScrapeGuard
-### Self-Healing Web Scraping
+# 🛡️ ScrapeGuard — Self-Healing Web Scraping
 
-> **ScrapeGuard detects broken extraction rules, discovers safer replacements, and verifies the recovered data before declaring success.**
+<div align="center">
 
-Web scrapers are fragile. A small change in a website's HTML can break CSS selectors and silently stop data extraction, poisoning downstream analytics pipelines with missing or corrupt records.
+[![Scrape-Verse Hackathon](https://img.shields.io/badge/Scrape--Verse-Hackathon-red?style=for-the-badge)](https://wemakedevs.org/hackathons/scrape-verse)
+[![WeMakeDevs](https://img.shields.io/badge/WeMakeDevs-Community-blue?style=for-the-badge)](https://wemakedevs.org)
+[![Bright Data](https://img.shields.io/badge/Bright%20Data-Powered-orange?style=for-the-badge)](https://brightdata.com)
+[![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)](https://www.python.org/)
+[![React](https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react)](https://react.dev/)
 
-ScrapeGuard solves this by providing an autonomous self-healing orchestration layer around web data collection: it detects extraction failures in real time, analyzes the mutated target DOM, scores and ranks candidate selectors against a confidence safety threshold ($\ge 0.75$), retries extraction, and verifies the recovered records against strict schema contracts before marking the pipeline healed.
+**A self-healing web scraping system that detects broken extraction rules, analyzes website changes, repairs them automatically, and verifies the recovered data.**
+
+[🐛 GitHub Repository](https://github.com/NitishAwesome/Scrape-Verse-IndiScrapers)
+
+</div>
+
+---
+
+## 🎯 What is ScrapeGuard?
+
+ScrapeGuard is a resilient web scraping system built for the **Into the Scrape-Verse Hackathon**.
+
+Traditional scrapers can stop working when a website changes its HTML structure. ScrapeGuard is designed to detect those failures, analyze the changed page structure, find safer replacement selectors, retry the extraction, and verify that the recovered data is actually valid.
+
+The important principle is:
+
+> **Repair is not success until the recovered data is verified.**
+
+ScrapeGuard can also safely refuse to repair when there is not enough evidence instead of guessing and producing incorrect data.
+
+---
+
+## 📹 Demo Video
+
+[![ScrapeGuard Demo](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](REPLACE_WITH_YOUTUBE_DEMO_URL)
 
 ---
 
@@ -373,13 +400,7 @@ In accordance with the hackathon guidelines, AI coding assistance was leveraged 
 
 ---
 
-## 20. Demo Video
-
-**YouTube Video**: *[Demo video will be added before submission]*
-
----
-
-## 21. Hackathon Information
+## 20. Hackathon Information
 
 - **Event**: Into the Scrape-Verse Hackathon
 - **Organized by**: [WeMakeDevs](https://wemakedevs.org/)
@@ -388,7 +409,7 @@ In accordance with the hackathon guidelines, AI coding assistance was leveraged 
 
 ---
 
-## 22. Author
+## 21. Author
 
 **Nitish Gupta**  
 *Built independently for the Into the Scrape-Verse Hackathon.*
