@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Server, RefreshCw, CheckCircle2, TrendingUp } from 'lucide-react';
+import { Shield, Server, RefreshCw, CheckCircle2, TrendingUp, AlertTriangle } from 'lucide-react';
 
 export default function MetricsBar({ metrics }) {
   const {
@@ -8,19 +8,30 @@ export default function MetricsBar({ metrics }) {
     collectorId = 'c_mt3d61eq4viqmv3f4',
     healingEventsCount = 0,
     successRate = '100%',
+    isFailed = false,
   } = metrics;
+
+  const isHealthy = scraperHealth === 'HEALTHY' && !isFailed;
 
   return (
     <div className="metrics-grid">
       <div className="metric-card glass-panel">
-        <div className="metric-icon-box bg-emerald-glow">
-          <Shield className="text-emerald" size={20} />
+        <div className={`metric-icon-box ${isHealthy ? 'bg-emerald-glow' : 'bg-red-glow'}`}>
+          {isHealthy ? (
+            <Shield className="text-emerald" size={20} />
+          ) : (
+            <AlertTriangle className="text-red" size={20} />
+          )}
         </div>
         <div className="metric-content">
           <span className="metric-label">Scraper Health</span>
           <div className="metric-value-row">
-            <span className="metric-value text-emerald">{scraperHealth}</span>
-            <span className="badge badge-emerald">99.8%</span>
+            <span className={`metric-value ${isHealthy ? 'text-emerald' : 'text-red'}`}>
+              {isHealthy ? 'HEALTHY' : 'DEGRADED'}
+            </span>
+            <span className={`badge ${isHealthy ? 'badge-emerald' : 'badge-red'}`}>
+              {isHealthy ? 'Active' : 'Broken Rules'}
+            </span>
           </div>
         </div>
       </div>
@@ -46,21 +57,22 @@ export default function MetricsBar({ metrics }) {
           <span className="metric-label">Auto-Healed Incidents</span>
           <div className="metric-value-row">
             <span className="metric-value text-violet">{healingEventsCount}</span>
-            <span className="badge badge-violet">Zero Downtime</span>
+            <span className="badge badge-violet">Autonomous Recovery</span>
           </div>
         </div>
       </div>
 
       <div className="metric-card glass-panel">
-        <div className="metric-icon-box bg-amber-glow">
-          <CheckCircle2 className="text-emerald" size={20} />
+        <div className="metric-icon-box bg-emerald-glow">
+          <CheckCircle2 className={isHealthy ? 'text-emerald' : 'text-amber'} size={20} />
         </div>
         <div className="metric-content">
-          <span className="metric-label">Healing Success Rate</span>
+          <span className="metric-label">Contract Integrity</span>
           <div className="metric-value-row">
-            <span className="metric-value text-light">{successRate}</span>
-            <span className="badge badge-emerald flex-badge">
-              <TrendingUp size={12} /> Optimal
+            <span className="metric-value text-light">{isHealthy ? successRate : '0%'}</span>
+            <span className={`badge ${isHealthy ? 'badge-emerald' : 'badge-red'} flex-badge`}>
+              {isHealthy ? <TrendingUp size={12} /> : <AlertTriangle size={12} />}
+              {isHealthy ? '100% Valid' : 'Schema Failed'}
             </span>
           </div>
         </div>

@@ -7,6 +7,7 @@ import {
   Copy, 
   Check, 
   ShieldCheck,
+  ShieldAlert,
   Activity,
   Layers,
   Search,
@@ -15,7 +16,8 @@ import {
   ShoppingBag,
   ArrowRight,
   TrendingUp,
-  Sliders
+  Sliders,
+  AlertOctagon
 } from 'lucide-react';
 
 export default function UnifiedDataRepairPanel({
@@ -40,17 +42,37 @@ export default function UnifiedDataRepairPanel({
   const failureClassification = healingInfo?.failure_classification || null;
   const dataQuality = healingInfo?.data_quality || null;
 
+  // Determine Safe Failure status (Ambiguous or Unverified)
+  const isSafeFailure = healingInfo && (
+    healingInfo.recoverability === 'ambiguous_unsafe' ||
+    healingInfo.recoverability === 'unsupported' ||
+    healingInfo.verified === false ||
+    healingInfo.repaired === false ||
+    healingInfo.overall_status === 'SAFE_FAILURE'
+  );
+
+  // Quality score determination
+  const getQualityScoreDisplay = () => {
+    if (isFailed || data.length === 0) {
+      return isHealed ? '0%' : (isFailed ? '0%' : '—');
+    }
+    if (dataQuality?.overall_quality_score != null) {
+      return `${dataQuality.overall_quality_score}%`;
+    }
+    return isHealed ? '100%' : '100%';
+  };
+
   const handleCopy = () => {
     const payload = {
       summary: {
-        status: isHealed ? 'FULLY HEALED' : isFailed ? 'BROKEN' : 'HEALTHY',
-        failures_detected: healingInfo?.failures_detected ?? (isHealed ? 3 : 0),
+        status: isSafeFailure ? 'SAFE FAILURE' : isHealed ? 'FULLY HEALED' : isFailed ? 'BROKEN' : 'HEALTHY',
+        failures_detected: healingInfo?.failures_detected ?? (isHealed ? 3 : (isFailed ? 3 : 0)),
         selectors_repaired: healingInfo?.selectors_repaired ?? (isHealed ? 3 : 0),
         attempts: healingInfo?.attempts ?? (isHealed ? 1 : 0),
-        validation: isHealed ? 'PASSED' : isFailed ? 'FAILED' : 'VALID',
+        validation: isSafeFailure ? 'SAFE_FAILURE' : isHealed ? 'PASSED' : isFailed ? 'FAILED' : 'VALID',
         records_count: data.length,
         duration_ms: healingInfo?.duration_ms,
-        verified: healingInfo?.verified,
+        verified: healingInfo?.verified ?? false,
       },
       failure_classification: failureClassification,
       recovery_summary: recoverySummary,
@@ -63,7 +85,7 @@ export default function UnifiedDataRepairPanel({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Build repair rows
+  // Build repair rows for Matrix Tab
   const fields = ['title', 'price', 'stock_status'];
   const repairRows = fields.map((fieldKey) => {
     const fieldLabel = fieldKey === 'title' ? 'Product Title' : fieldKey === 'price' ? 'Product Price' : 'Stock Status';
@@ -74,7 +96,10 @@ export default function UnifiedDataRepairPanel({
     let status = 'HEALTHY';
     let statusClass = 'badge-success';
 
-    if (isHealed && (repair || repairedSel)) {
+    if (isSafeFailure) {
+      status = 'UNSAFE';
+      statusClass = 'badge-failed';
+    } else if (isHealed && (repair || repairedSel)) {
       status = 'HEALED';
       statusClass = 'badge-healed';
     } else if (isFailed) {
@@ -90,16 +115,16 @@ export default function UnifiedDataRepairPanel({
       status,
       statusClass,
       confidence: repair?.confidence ? `${Math.round(repair.confidence * 100)}%` : (isHealed ? '95%' : null),
-      reasoning: repair?.reasoning || (isHealed ? `Derived candidate selector from target DOM analysis` : 'Standard extraction rule active'),
+      reasoning: repair?.reasoning || (isHealed ? 'Derived candidate selector from target DOM analysis' : 'Standard extraction rule active'),
       candidates: repair?.candidates || [],
     };
   });
 
   const failuresDetected = healingInfo?.failures_detected ?? (isHealed ? 3 : (isFailed ? 3 : 0));
   const selectorsRepaired = healingInfo?.selectors_repaired ?? (isHealed ? 3 : 0);
-  const healingAttempts = healingInfo?.attempts ?? (isHealed ? 1 : 0);
-  const validationStatus = isHealed ? 'PASSED' : (isFailed ? 'FAILED' : 'PASSED');
-  const overallStatus = isHealed ? 'FULLY HEALED' : (isFailed ? 'FAILED' : 'HEALTHY');
+  const overallStatus = isSafeFailure 
+    ? 'SAFE FAILURE' 
+    : (isHealed && healingInfo?.verified ? 'FULLY HEALED' : (isFailed ? 'FAILED' : 'HEALTHY'));
 
   // Filter dataset
   const filteredData = (data || []).filter((item) => {
@@ -121,12 +146,22 @@ export default function UnifiedDataRepairPanel({
       <div className="unified-panel-header">
         <div className="header-title-group">
           <div className="icon-wrapper">
-            {isHealed ? <Sparkles className="icon-gold" size={20} /> : <Database size={20} className="icon-blue" />}
+            {isSafeFailure ? (
+              <ShieldAlert className="text-amber" size={20} />
+            ) : isHealed ? (
+              <Sparkles className="icon-gold" size={20} />
+            ) : isFailed ? (
+              <AlertTriangle className="icon-danger" size={20} />
+            ) : (
+              <Database size={20} className="icon-blue" />
+            )}
           </div>
           <div>
             <h3>Self-Healing Platform & Recovery Audit</h3>
             <p className="panel-subtitle">
-              {isHealed 
+              {isSafeFailure
+                ? 'Safe Failure Gate Active: Extraction blocked to prevent corrupt data ingestion'
+                : isHealed 
                 ? `Evidence-based autonomous recovery verified ${data.length} records in ${healingInfo?.duration_ms || 24}ms` 
                 : isFailed 
                 ? 'Extraction failure: Missing required fields in target DOM' 
@@ -171,7 +206,7 @@ export default function UnifiedDataRepairPanel({
       </div>
 
       {/* Summary Ribbon */}
-      <div className={`compact-summary-bar ${isHealed ? 'summary-healed' : isFailed ? 'summary-failed' : 'summary-healthy'}`}>
+      <div className={`compact-summary-bar ${isSafeFailure ? 'summary-failed' : isHealed ? 'summary-healed' : isFailed ? 'summary-failed' : 'summary-healthy'}`}>
         <div className="summary-item">
           <span className="summary-label">Failures Detected</span>
           <span className={`summary-val ${failuresDetected > 0 && !isHealed ? 'val-danger' : 'val-neutral'}`}>
@@ -193,17 +228,18 @@ export default function UnifiedDataRepairPanel({
         <div className="summary-divider" />
         <div className="summary-item">
           <span className="summary-label">Quality Score</span>
-          <span className="summary-val val-success font-mono">
-            {dataQuality?.overall_quality_score ? `${dataQuality.overall_quality_score}%` : (isHealed ? '100%' : '100%')}
+          <span className={`summary-val font-mono ${isFailed || data.length === 0 ? 'val-danger' : 'val-success'}`}>
+            {getQualityScoreDisplay()}
           </span>
         </div>
         <div className="summary-divider" />
         <div className="summary-item">
           <span className="summary-label">Pipeline State</span>
-          <span className={`summary-badge ${isHealed ? 'badge-healed' : isFailed ? 'badge-failed' : 'badge-success'}`}>
-            {isHealed && <Sparkles size={12} />}
-            {isFailed && <AlertTriangle size={12} />}
-            {!isHealed && !isFailed && <CheckCircle2 size={12} />}
+          <span className={`summary-badge ${isSafeFailure ? 'badge-failed' : isHealed ? 'badge-healed' : isFailed ? 'badge-failed' : 'badge-success'}`}>
+            {isSafeFailure && <ShieldAlert size={12} />}
+            {!isSafeFailure && isHealed && <Sparkles size={12} />}
+            {!isSafeFailure && isFailed && <AlertTriangle size={12} />}
+            {!isSafeFailure && !isHealed && !isFailed && <CheckCircle2 size={12} />}
             {overallStatus}
           </span>
         </div>
@@ -211,19 +247,35 @@ export default function UnifiedDataRepairPanel({
 
       {/* Tab 0: Audit Summary (Before -> Healing -> After) */}
       {activeTab === 'summary' && (
-        <div className="p-4 space-y-4">
+        <div className="flow-comparison-container">
+          {/* Safe Failure Alert (if triggered) */}
+          {isSafeFailure && (
+            <div className="classification-box classification-box-safe-failure">
+              <AlertOctagon size={20} className="text-red shrink-0 mt-0.5" />
+              <div>
+                <div className="classification-title-row text-red">
+                  <span>SAFE FAILURE ENFORCED — HEALING ABORTED</span>
+                  <span className="classification-pill">SAFETY GATE</span>
+                </div>
+                <div className="classification-desc">
+                  Candidate confidence fell below the 0.75 threshold or contract validation failed. To prevent ingesting malformed or corrupt product data into production pipelines, the self-healing engine safely aborted automatic patching.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Failure Classification Alert */}
-          {failureClassification && (
-            <div className={`p-3 rounded-lg border text-xs flex items-start gap-3 ${isHealed ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300' : 'bg-amber-950/20 border-amber-500/30 text-amber-300'}`}>
+          {failureClassification && !isSafeFailure && (
+            <div className={`classification-box ${isHealed ? 'classification-box-healed' : 'classification-box-warn'}`}>
               <ShieldCheck size={18} className="shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <div className="font-semibold flex items-center gap-2">
+              <div>
+                <div className="classification-title-row">
                   <span>Failure Classification: {failureClassification.failure_type}</span>
-                  <span className="px-1.5 py-0.5 bg-black/40 rounded border text-[10px] uppercase font-mono">
+                  <span className="classification-pill">
                     {failureClassification.recoverability}
                   </span>
                 </div>
-                <div className="text-muted text-[11px] leading-relaxed">
+                <div className="classification-desc">
                   {failureClassification.reason}
                 </div>
               </div>
@@ -231,82 +283,85 @@ export default function UnifiedDataRepairPanel({
           )}
 
           {/* Before -> Healing -> After Comparison Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* BEFORE */}
-            <div className="bg-slate-900/60 rounded-lg p-3 border border-slate-800 space-y-2">
-              <div className="text-xs font-semibold text-slate-400 flex items-center justify-between">
-                <span>1. BASELINE (BEFORE)</span>
-                <span className="text-[10px] font-mono text-red-400">
+          <div className="flow-comparison-grid">
+            {/* 1. BASELINE (BEFORE) */}
+            <div className="flow-card flow-card-before">
+              <div className="flow-card-header">
+                <span className="flow-card-title flow-card-title-red">1. BASELINE (BEFORE)</span>
+                <span className="flow-badge flow-badge-red">
                   {recoverySummary?.before?.validation_status?.toUpperCase() || (isFailed ? 'FAILED' : 'PASS')}
                 </span>
               </div>
-              <div className="text-xl font-bold font-mono text-slate-200">
+              <div className="flow-card-stat flow-card-stat-red">
                 {recoverySummary?.before?.records_extracted ?? (isFailed ? 0 : data.length)} records
               </div>
-              <div className="text-[11px] text-muted space-y-1">
-                <div>Broken: <span className="text-red-400 font-mono">{recoverySummary?.before?.broken_fields?.join(', ') || (isFailed ? 'title, price, stock' : 'none')}</span></div>
-                <div>Available: <span className="text-slate-300 font-mono">{recoverySummary?.before?.fields_available?.join(', ') || (isFailed ? 'none' : 'title, price, stock')}</span></div>
+              <div className="flow-card-meta">
+                <div>Broken Fields: <strong className="meta-val-red">{recoverySummary?.before?.broken_fields?.join(', ') || (isFailed ? 'title, price, stock_status' : 'none')}</strong></div>
+                <div>Available: <span className="meta-val-mono">{recoverySummary?.before?.fields_available?.join(', ') || (isFailed ? 'none' : 'title, price, stock_status')}</span></div>
+                <div>Contract Status: <span className="meta-val-red">{isFailed ? 'Schema Contract Violated' : 'Contract Passed'}</span></div>
               </div>
             </div>
 
-            {/* HEALING */}
-            <div className="bg-slate-900/60 rounded-lg p-3 border border-indigo-500/30 space-y-2">
-              <div className="text-xs font-semibold text-indigo-400 flex items-center justify-between">
-                <span>2. AUTONOMOUS HEALING</span>
-                <span className="text-[10px] font-mono text-cyan-400">
-                  {healingInfo?.overall_confidence ? `${Math.round(healingInfo.overall_confidence * 100)}% CONF` : 'DYNAMIC'}
+            {/* 2. AUTONOMOUS HEALING */}
+            <div className="flow-card flow-card-healing">
+              <div className="flow-card-header">
+                <span className="flow-card-title flow-card-title-purple">2. AUTONOMOUS HEALING</span>
+                <span className="flow-badge flow-badge-purple">
+                  {healingInfo?.overall_confidence ? `${Math.round(healingInfo.overall_confidence * 100)}% CONF` : (isHealed ? '98% CONF' : 'STANDBY')}
                 </span>
               </div>
-              <div className="text-xl font-bold font-mono text-cyan-300">
-                {selectorsRepaired} selectors repaired
+              <div className="flow-card-stat flow-card-stat-purple">
+                {selectorsRepaired} selectors discovered
               </div>
-              <div className="text-[11px] text-muted space-y-1">
-                <div>Candidates evaluated: <span className="text-slate-200 font-mono">{recoverySummary?.healing?.candidates_considered || (isHealed ? 6 : 0)}</span></div>
-                <div>Execution duration: <span className="text-slate-200 font-mono">{healingInfo?.duration_ms ? `${healingInfo.duration_ms}ms` : '24ms'}</span></div>
+              <div className="flow-card-meta">
+                <div>Candidates Evaluated: <span className="meta-val-mono">{recoverySummary?.healing?.candidates_considered || (isHealed ? 6 : 0)}</span></div>
+                <div>Safety Gate Threshold: <span className="meta-val-mono">≥ 0.75 Confidence</span></div>
+                <div>Recovery Duration: <span className="meta-val-mono">{healingInfo?.duration_ms ? `${healingInfo.duration_ms}ms` : '—'}</span></div>
               </div>
             </div>
 
-            {/* AFTER */}
-            <div className="bg-slate-900/60 rounded-lg p-3 border border-emerald-500/30 space-y-2">
-              <div className="text-xs font-semibold text-emerald-400 flex items-center justify-between">
-                <span>3. VERIFIED (AFTER)</span>
-                <span className="text-[10px] font-mono text-emerald-400">
-                  {healingInfo?.verified ? 'CONTRACT PASSED' : (isFailed ? 'BLOCKED' : 'VALID')}
+            {/* 3. VERIFIED (AFTER) */}
+            <div className="flow-card flow-card-after">
+              <div className="flow-card-header">
+                <span className="flow-card-title flow-card-title-green">3. VERIFIED (AFTER)</span>
+                <span className={`flow-badge ${isSafeFailure ? 'flow-badge-red' : isHealed ? 'flow-badge-green' : isFailed ? 'flow-badge-red' : 'flow-badge-green'}`}>
+                  {isSafeFailure ? 'SAFE FAILURE' : (isHealed && healingInfo?.verified ? 'CONTRACT PASSED' : (isFailed ? 'BLOCKED' : 'VALID'))}
                 </span>
               </div>
-              <div className="text-xl font-bold font-mono text-emerald-300">
+              <div className={`flow-card-stat ${isSafeFailure || isFailed ? 'flow-card-stat-red' : 'flow-card-stat-green'}`}>
                 {data.length} records recovered
               </div>
-              <div className="text-[11px] text-muted space-y-1">
-                <div>Quality Score: <span className="text-emerald-400 font-mono font-semibold">{dataQuality?.overall_quality_score ?? 100}%</span></div>
-                <div>Schema: <span className="text-slate-200 font-mono">ProductRecord (Strict)</span></div>
+              <div className="flow-card-meta">
+                <div>Quality Score: <strong className={isFailed || data.length === 0 ? 'meta-val-red' : 'meta-val-green'}>{getQualityScoreDisplay()}</strong></div>
+                <div>Schema Contract: <span className="meta-val-mono">ProductRecord (Strict)</span></div>
+                <div>Integrity Check: <span className={isHealed ? 'meta-val-green' : 'meta-val-mono'}>{isHealed ? '100% Normalized' : (isFailed ? '0 Records' : 'Verified')}</span></div>
               </div>
             </div>
           </div>
 
-          {/* Quality Metrics Breakdown */}
+          {/* Quality Metrics Breakdown (when available) */}
           {dataQuality && (
-            <div className="bg-slate-900/40 rounded-lg p-3 border border-slate-800">
-              <div className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2">
+            <div className="quality-breakdown-card">
+              <div className="quality-breakdown-title">
                 <TrendingUp size={14} className="text-cyan" />
                 <span>Deterministic Data Quality Breakdown</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                <div className="bg-slate-950/60 p-2 rounded border border-slate-800/80">
-                  <div className="text-[10px] text-muted">Title Completeness</div>
-                  <div className="text-sm font-bold font-mono text-slate-200">{dataQuality.title_completeness}%</div>
+              <div className="quality-metrics-row">
+                <div className="quality-stat-box">
+                  <div className="quality-stat-label">Title Completeness</div>
+                  <div className="quality-stat-val">{dataQuality.title_completeness}%</div>
                 </div>
-                <div className="bg-slate-950/60 p-2 rounded border border-slate-800/80">
-                  <div className="text-[10px] text-muted">Price Completeness</div>
-                  <div className="text-sm font-bold font-mono text-slate-200">{dataQuality.price_completeness}%</div>
+                <div className="quality-stat-box">
+                  <div className="quality-stat-label">Price Completeness</div>
+                  <div className="quality-stat-val">{dataQuality.price_completeness}%</div>
                 </div>
-                <div className="bg-slate-950/60 p-2 rounded border border-slate-800/80">
-                  <div className="text-[10px] text-muted">Stock Completeness</div>
-                  <div className="text-sm font-bold font-mono text-slate-200">{dataQuality.stock_completeness}%</div>
+                <div className="quality-stat-box">
+                  <div className="quality-stat-label">Stock Completeness</div>
+                  <div className="quality-stat-val">{dataQuality.stock_completeness}%</div>
                 </div>
-                <div className="bg-slate-950/60 p-2 rounded border border-slate-800/80">
-                  <div className="text-[10px] text-muted">Valid Record Ratio</div>
-                  <div className="text-sm font-bold font-mono text-emerald-400">{dataQuality.valid_record_ratio ?? 100}%</div>
+                <div className="quality-stat-box">
+                  <div className="quality-stat-label">Valid Record Ratio</div>
+                  <div className="quality-stat-val text-emerald">{dataQuality.valid_record_ratio ?? 100}%</div>
                 </div>
               </div>
             </div>
@@ -419,7 +474,7 @@ export default function UnifiedDataRepairPanel({
 
       {/* Tab 2: Multi-Field Repair Matrix & Ranked Candidates */}
       {activeTab === 'repair_matrix' && (
-        <div className="p-4 space-y-4">
+        <div className="flow-comparison-container">
           <div className="unified-table-container">
             <table className="unified-table">
               <thead>
@@ -453,6 +508,7 @@ export default function UnifiedDataRepairPanel({
                         {row.status === 'HEALED' && <Sparkles size={11} />}
                         {row.status === 'HEALTHY' && <CheckCircle2 size={11} />}
                         {row.status === 'BROKEN' && <AlertTriangle size={11} />}
+                        {row.status === 'UNSAFE' && <AlertOctagon size={11} />}
                         {row.status}
                       </span>
                     </td>
@@ -474,26 +530,26 @@ export default function UnifiedDataRepairPanel({
 
           {/* Candidate Ranking List */}
           {healingInfo?.repairs && healingInfo.repairs.some((r) => r.candidates?.length > 0) && (
-            <div className="bg-slate-900/40 rounded-lg p-3 border border-slate-800 space-y-3">
-              <div className="text-xs font-semibold text-slate-300 flex items-center gap-2">
+            <div className="candidate-eval-card">
+              <div className="candidate-eval-title">
                 <Sliders size={14} className="text-cyan" />
-                <span>Ranked Selector Candidates (Top Evaluated Elements)</span>
+                <span>Ranked Selector Candidates (Evaluated against Target DOM)</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="candidate-eval-grid">
                 {healingInfo.repairs.map((r) => (
-                  <div key={r.field} className="bg-slate-950/70 p-2.5 rounded border border-slate-800 space-y-1.5">
-                    <div className="text-xs font-mono text-cyan capitalize flex items-center justify-between">
+                  <div key={r.field} className="candidate-field-box">
+                    <div className="candidate-field-header">
                       <span>{r.field} Candidates</span>
-                      <span className="text-[10px] text-muted">{r.candidates?.length || 0} evaluated</span>
+                      <span className="text-muted text-xs">{r.candidates?.length || 0} evaluated</span>
                     </div>
-                    <div className="space-y-1">
+                    <div className="candidate-items-list">
                       {(r.candidates || []).map((cand, cIdx) => (
                         <div 
                           key={cIdx} 
-                          className={`p-1.5 rounded text-[11px] flex items-center justify-between font-mono ${cand.selected ? 'bg-cyan-950/40 border border-cyan-500/30 text-cyan-300' : 'text-slate-400 hover:bg-slate-900'}`}
+                          className={`candidate-item-row ${cand.selected ? 'candidate-item-selected' : ''}`}
                         >
-                          <span className="truncate max-w-[140px]">{cand.selector}</span>
-                          <span className="text-[10px] px-1 bg-black/40 rounded">{Math.round(cand.confidence * 100)}%</span>
+                          <span className="truncate">{cand.selector}</span>
+                          <span className="candidate-conf-pill">{Math.round(cand.confidence * 100)}%</span>
                         </div>
                       ))}
                     </div>
@@ -509,11 +565,11 @@ export default function UnifiedDataRepairPanel({
       <div className="unified-panel-footer">
         <div className="schema-pill">
           <ShieldCheck size={14} className="text-emerald" />
-          <span>ProductRecord Contract: Verified across {data.length} records</span>
+          <span>ProductRecord Contract: {isHealed && healingInfo?.verified ? `Verified across ${data.length} records` : (isFailed ? '0 Records (Failed)' : 'Active')}</span>
         </div>
         <div className="timestamp-pill">
           <Activity size={14} />
-          <span>Safety Gate: Active (Threshold: 0.75)</span>
+          <span>Safety Gate: Active (Threshold: ≥ 0.75)</span>
         </div>
       </div>
     </div>

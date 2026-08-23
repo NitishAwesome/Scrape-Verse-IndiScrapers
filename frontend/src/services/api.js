@@ -52,32 +52,55 @@ export async function runScrape(fail = false, targetUrl = '') {
     };
   } catch (error) {
     const latency = Math.round(performance.now() - startTime);
-    if (fail) {
-      return {
-        collector_id: 'c_mock_123456',
-        status: 'failed',
-        records_extracted: 0,
-        data: [],
-        error: 'SelectorNotFound: .product-price',
-        latencyMs: latency,
-        timestamp: new Date().toISOString(),
-      };
-    }
     return {
       collector_id: 'c_mock_123456',
-      status: 'success',
-      records_extracted: 1,
-      data: [
-        {
-          title: 'Wireless Gaming Mouse',
-          price: '$49.99',
-          stock_status: 'In Stock',
-        },
-      ],
-      error: null,
+      status: fail ? 'failed' : 'success',
+      records_extracted: fail ? 0 : 1,
+      data: fail ? [] : [{ title: 'Wireless Gaming Mouse', price: '$49.99', stock_status: 'In Stock' }],
+      error: fail ? 'SelectorNotFound: .product-price' : null,
       latencyMs: latency,
       timestamp: new Date().toISOString(),
     };
+  }
+}
+
+export async function simulateFailure(targetUrl = '') {
+  const startTime = performance.now();
+  try {
+    const res = await fetch(`${API_BASE}/healing/simulate-failure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const latency = Math.round(performance.now() - startTime);
+    const data = await res.json();
+    return {
+      ...data,
+      latencyMs: latency,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    const latency = Math.round(performance.now() - startTime);
+    return {
+      collector_id: 'c_mt3d61eq4viqmv3f4',
+      status: 'failed',
+      records_extracted: 0,
+      data: [],
+      error: 'SelectorNotFound: .product-name, .current-price, .availability',
+      latencyMs: latency,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+export async function resetScraperState() {
+  try {
+    const res = await fetch(`${API_BASE}/healing/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return await res.json();
+  } catch (error) {
+    return { status: 'success', simulation_active: false };
   }
 }
 

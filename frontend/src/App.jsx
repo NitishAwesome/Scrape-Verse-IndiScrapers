@@ -6,7 +6,7 @@ import ScraperCard from './components/ScraperCard';
 import UnifiedDataRepairPanel from './components/UnifiedDataRepairPanel';
 import HealingTimeline from './components/HealingTimeline';
 import ActivityLogs from './components/ActivityLogs';
-import { fetchHealingStatus, runScrape, runUnifiedHealing } from './services/api';
+import { fetchHealingStatus, runScrape, runUnifiedHealing, simulateFailure, resetScraperState } from './services/api';
 import './App.css';
 
 export default function App() {
@@ -24,58 +24,39 @@ export default function App() {
   const [targetUrl, setTargetUrl] = useState('https://books.toscrape.com/catalogue/category/books/travel_2/index.html');
   const [collectorId, setCollectorId] = useState('c_mt3d61eq4viqmv3f4');
   const [scraperMode, setScraperMode] = useState('brightdata');
+  const [currentMode, setCurrentMode] = useState('LIVE_EXTRACTION'); // 'LIVE_EXTRACTION' | 'CONTROLLED_SIMULATION' | 'LIVE_SELF_HEALING'
 
   // Self-Healing Unified State
   const [timelineStep, setTimelineStep] = useState(0);
   const [isHealing, setIsHealing] = useState(false);
   const [healingInfo, setHealingInfo] = useState(null);
   const [healingCount, setHealingCount] = useState(0);
+  const [logs, setLogs] = useState([]);
   const [rawPayload, setRawPayload] = useState(null);
   const [showPayloadModal, setShowPayloadModal] = useState(false);
 
-  const [logs, setLogs] = useState([
-    {
-      time: new Date().toLocaleTimeString(),
-      level: 'INFO',
-      message: 'ScrapeVerse self-healing engine online. Scraper Studio collector c_mt3d61eq4viqmv3f4 ready.',
-    },
-    {
-      time: new Date().toLocaleTimeString(),
-      level: 'INFO',
-      message: 'Target URL configured: https://books.toscrape.com/catalogue/category/books/travel_2/index.html',
-    },
-  ]);
-
-  const addLog = (level, message) => {
+  // Append Activity Log Helper
+  const addLog = (type, message) => {
     setLogs((prev) => [
       {
+        id: Date.now() + Math.random(),
         time: new Date().toLocaleTimeString(),
-        level,
+        type,
         message,
       },
-      ...prev,
+      ...prev.slice(0, 49),
     ]);
   };
 
-  // Health check on mount
+  // Check Backend Connection & Status
   const checkHealth = async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetchHealingStatus();
-      setIsConnected(res.status === 'online');
-      if (res.scraper_mode) setScraperMode(res.scraper_mode);
-      if (res.collector_id) setCollectorId(res.collector_id);
-      addLog('INFO', `Health probe OK: ${res.module} (Mode: ${res.scraper_mode?.toUpperCase()}, Retries: ${res.max_retries || 10})`);
-      
-      // Only auto-load if in offline mock mode
-      if (res.scraper_mode === 'mock') {
-        const result = await runScrape(false, '');
-        if (result.status === 'success' && result.data?.length > 0) {
-          setRecords(result.data);
-          setRawPayload(result);
-          setLatency(`${result.latencyMs || 42}ms`);
-        }
-      }
+      const status = await fetchHealingStatus();
+      setIsConnected(true);
+      if (status.collector_id) setCollectorId(status.collector_id);
+      if (status.scraper_mode) setScraperMode(status.scraper_mode);
+      addLog('INFO', `Backend online [${status.scraper_mode?.toUpperCase() || 'BRIGHTDATA'} mode] (Collector: ${status.collector_id})`);
     } catch {
       setIsConnected(false);
       addLog('WARN', 'Backend connection probe timed out');
@@ -91,7 +72,8 @@ export default function App() {
   // Action 1: Run Normal Scraper
   const handleRunNormal = async () => {
     setIsRunning(true);
-    addLog('INFO', `Triggering scrape execution${targetUrl ? ` for ${targetUrl}` : ''} via GET /api/scrape...`);
+    setCurrentMode('LIVE_EXTRACTION');
+    addLog('INFO', `Triggering live extraction${targetUrl ? ` for ${targetUrl}` : ''} via GET /api/scrape...`);
     try {
       const result = await runScrape(false, targetUrl);
       setRawPayload(result);
@@ -107,12 +89,13 @@ export default function App() {
         setActiveSelector('.product-title, .product-price, .product-status');
         setHealingInfo(null);
         setTimelineStep(0);
-        addLog('INFO', `Scrape succeeded: Extracted ${result.data?.length || 0} product records with 100% schema validation in ${result.latencyMs}ms`);
+        addLog('INFO', `Live scrape succeeded: Extracted ${result.data?.length || 0} product records with 100% schema validation in ${result.latencyMs}ms`);
       } else {
         setScraperStatus('FAILED');
         setRecords([]);
-        setError(result.error);
-        addLog('ERROR', `Scrape failed: ${result.error}`);
+        setError(result.error || 'SelectorNotFound: Active extraction rules failed');
+        setActiveSelector('.product-name, .current-price, .availability (BROKEN)');
+        addLog('ERROR', `Live scrape failed: ${result.error || 'Active selectors failed to match target DOM'}`);
       }
     } catch (err) {
       addLog('ERROR', `Scrape execution error: ${err.message}`);
@@ -124,21 +107,22 @@ export default function App() {
   // Action 2: Simulate Website Mutation / Failure
   const handleSimulateFailure = async () => {
     setIsRunning(true);
+    setCurrentMode('CONTROLLED_SIMULATION');
     setTimelineStep(0);
     setHealingInfo(null);
     addLog('WARN', 'Simulating target website DOM redesign mutating 3 extraction rules (.product-title -> .product-name, .product-price -> .current-price, .product-status -> .availability)...');
 
     try {
-      const result = await runScrape(true);
+      const result = await simulateFailure(targetUrl);
       setRawPayload(result);
       setLastRun(new Date().toLocaleTimeString());
       setLatency(`${result.latencyMs || 45}ms`);
 
       setScraperStatus('FAILED');
       setRecords([]);
-      setError(result.error || 'SelectorNotFound: .product-title, .product-price, .product-status');
+      setError(result.error || 'SelectorNotFound: .product-name, .current-price, .availability');
       setActiveSelector('.product-name, .current-price, .availability (BROKEN)');
-      addLog('ERROR', `Baseline scrape failed: ${result.error || 'Missing required fields in DOM'}`);
+      addLog('ERROR', `Controlled fault simulation active: ${result.error || 'Missing required fields in DOM'}`);
     } catch (err) {
       addLog('ERROR', `Simulation error: ${err.message}`);
     } finally {
@@ -150,6 +134,7 @@ export default function App() {
   const handleTriggerHealing = async () => {
     setIsHealing(true);
     setIsRunning(true);
+    setCurrentMode('LIVE_SELF_HEALING');
     setError(null);
     setTimelineStep(1);
 
@@ -158,7 +143,7 @@ export default function App() {
 
     setTimeout(() => {
       setTimelineStep(2);
-      addLog('WARN', '[Step 2/7] FAILURES DETECTED: 3 missing/broken selector fields detected in one pass (title, price, stock_status).');
+      addLog('WARN', '[Step 2/7] FAILURES DETECTED: Missing/broken selector fields detected in active extraction config.');
     }, 350);
 
     setTimeout(() => {
@@ -187,7 +172,7 @@ export default function App() {
         setTimelineStep(7);
         setHealingInfo(result);
         setHealingCount((c) => c + 1);
-        setScraperStatus('HEALTHY');
+        setScraperStatus(result.repaired && result.verified ? 'HEALTHY' : 'FAILED');
         
         const repSelectors = result.repaired_selectors 
           ? Object.values(result.repaired_selectors).join(', ')
@@ -196,15 +181,19 @@ export default function App() {
 
         const recoveredData = result.data || result.final_data || [];
         setRecords(recoveredData);
-        setError(null);
+        setError(result.error || null);
         setLastRun(new Date().toLocaleTimeString());
         setLatency(`${result.latencyMs || 54}ms`);
 
         const repList = result.repairs || [];
         const repSummary = repList.map((r) => `${r.old_selector} → ${r.new_selector} (${Math.round(r.confidence * 100)}%)`).join(', ');
 
-        addLog('HEAL', `[Step 7/7] VALIDATION PASSED: Schema verified across all ${recoveredData.length} records with 100% integrity.`);
-        addLog('HEAL', `🎉 AUTONOMOUS RECOVERY COMPLETE: ${repList.length || 3} selector(s) repaired [${repSummary || repSelectors}]. Recovered ${recoveredData.length} valid product records.`);
+        if (result.repaired && result.verified) {
+          addLog('HEAL', `[Step 7/7] VALIDATION PASSED: Schema verified across all ${recoveredData.length} records with 100% contract integrity.`);
+          addLog('HEAL', `🎉 AUTONOMOUS RECOVERY COMPLETE: ${repList.length || 3} selector(s) repaired [${repSummary || repSelectors}]. Recovered ${recoveredData.length} valid product records.`);
+        } else {
+          addLog('ERROR', `[Step 7/7] SAFE FAILURE ENFORCED: Confidence below safety threshold or contract unverified.`);
+        }
       } catch (err) {
         addLog('ERROR', `Self-healing error: ${err.message}`);
       } finally {
@@ -230,7 +219,8 @@ export default function App() {
           activeScrapers: 1,
           collectorId: collectorId,
           healingEventsCount: healingCount,
-          successRate: '100%',
+          successRate: scraperStatus === 'FAILED' ? '0%' : '100%',
+          isFailed: scraperStatus === 'FAILED',
         }}
       />
 
@@ -253,6 +243,7 @@ export default function App() {
         onTargetUrlChange={setTargetUrl}
         collectorId={collectorId}
         scraperMode={scraperMode}
+        currentMode={currentMode}
         onRunNormal={handleRunNormal}
         onSimulateFailure={handleSimulateFailure}
         onTriggerHealing={handleTriggerHealing}
