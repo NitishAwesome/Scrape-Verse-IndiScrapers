@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, Query
 from backend.automation.healing_manager import HealingManager
 from backend.automation.models import FailureType, HealingResult
 from backend.scraper.service import ScraperService
+from backend.scraper.state import runtime_state
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,36 @@ def get_healing_status() -> dict[str, Any]:
         "confidence_threshold": settings.healing_confidence_threshold,
         "mock_llm_mode": _healing_manager.repair_engine.mock_mode,
         "max_retries": _healing_manager.max_retries,
+        "simulation_active": runtime_state.simulation_active,
+        "active_selectors": runtime_state.active_selectors,
         "supported_failure_types": [ft.value for ft in FailureType],
+    }
+
+
+@router.post("/simulate-failure")
+@router.get("/simulate-failure")
+def simulate_failure_endpoint() -> dict[str, Any]:
+    """Explicitly mutate runtime extraction state to simulate target DOM redesign failure."""
+    mutated = runtime_state.simulate_failure()
+    return {
+        "status": "failed",
+        "simulation_active": True,
+        "records_extracted": 0,
+        "error": f"SelectorNotFound: {', '.join(mutated.values())}",
+        "active_selectors": mutated,
+        "fields_detected_as_broken": runtime_state.broken_fields,
+    }
+
+
+@router.post("/reset")
+@router.get("/reset")
+def reset_state_endpoint() -> dict[str, Any]:
+    """Reset extraction state to healthy baseline."""
+    runtime_state.reset()
+    return {
+        "status": "success",
+        "simulation_active": False,
+        "active_selectors": runtime_state.active_selectors,
     }
 
 
@@ -206,8 +236,6 @@ def run_healing_test() -> dict[str, Any]:
     Executes unified self-healing engine on single price mutation.
     """
     logger.info("Executing controlled single-selector self-healing sequence")
-    _scraper_service.execute_dict(trigger_failure=False)
-
     initial_selectors = {
         "title": ".product-title",
         "price": ".product-price",
@@ -218,6 +246,15 @@ def run_healing_test() -> dict[str, Any]:
         html_content=DEMO_MUTATED_HTML,
         initial_selectors=initial_selectors,
     )
+
+    if healing_result.repaired and healing_result.verified:
+        repaired_map = {
+            r.field: r.new_selector
+            for r in healing_result.selector_repairs
+            if r.confidence >= _healing_manager.repair_engine.confidence_threshold
+        }
+        if repaired_map:
+            runtime_state.heal(repaired_map)
 
     return _build_unified_payload(healing_result, initial_selectors)
 
@@ -230,8 +267,6 @@ def run_multi_healing_demo() -> dict[str, Any]:
     Mutates title, price, and stock status across the full catalog, repairs all rules, and recovers dataset.
     """
     logger.info("Executing multi-selector self-healing sequence across full catalog")
-    _scraper_service.execute_dict(trigger_failure=False)
-
     initial_selectors = {
         "title": ".product-title",
         "price": ".product-price",
@@ -244,6 +279,15 @@ def run_multi_healing_demo() -> dict[str, Any]:
         html_content=mutated_html,
         initial_selectors=initial_selectors,
     )
+
+    if healing_result.repaired and healing_result.verified:
+        repaired_map = {
+            r.field: r.new_selector
+            for r in healing_result.selector_repairs
+            if r.confidence >= _healing_manager.repair_engine.confidence_threshold
+        }
+        if repaired_map:
+            runtime_state.heal(repaired_map)
 
     return _build_unified_payload(healing_result, initial_selectors)
 
@@ -261,11 +305,8 @@ def run_unified_recovery(
     """
     target_url = url or (payload.get("url") if payload else None) or _scraper_service.settings.target_url
 
-    initial_selectors = {
-        "title": ".product-title",
-        "price": ".product-price",
-        "stock_status": ".product-status",
-    }
+    # Baseline ("before") configuration
+    initial_selectors = dict(runtime_state.original_selectors)
 
     # If live brightdata mode and valid HTTP URL, run live self-healing pipeline
     if _scraper_service.settings.scraper_mode.value == "brightdata" and target_url and str(target_url).startswith("http"):
@@ -274,6 +315,21 @@ def run_unified_recovery(
             target_url=str(target_url),
             initial_selectors=initial_selectors,
         )
-        return _build_unified_payload(healing_result, initial_selectors)
+    else:
+        mutated_html = get_mutated_catalog_html()
+        healing_result = _healing_manager.heal_html(
+            html_content=mutated_html,
+            initial_selectors=initial_selectors,
+        )
 
-    return run_multi_healing_demo()
+    # If recovery succeeded, patch the runtime extraction configuration!
+    if healing_result.repaired and healing_result.verified:
+        repaired_map = {
+            r.field: r.new_selector
+            for r in healing_result.selector_repairs
+            if r.confidence >= _healing_manager.repair_engine.confidence_threshold
+        }
+        if repaired_map:
+            runtime_state.heal(repaired_map)
+
+    return _build_unified_payload(healing_result, initial_selectors)

@@ -9,6 +9,7 @@ from backend.scraper.exceptions import ScraperError, ScraperExecutionError, Scra
 from backend.scraper.mock_client import MockScraperClient
 from backend.scraper.models import ScrapeResult, ScrapeStatus
 from backend.scraper.normalizer import normalize_records
+from backend.scraper.state import RuntimeExtractionState, runtime_state
 from backend.scraper.validator import validate_records
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,11 @@ class ScraperService:
         self,
         client: ScraperClient | None = None,
         settings: ScraperSettings | None = None,
+        state: RuntimeExtractionState | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.client = client or create_scraper_client(self.settings)
+        self.state = state or (RuntimeExtractionState() if client is not None else runtime_state)
 
     def execute(
         self,
@@ -54,10 +57,28 @@ class ScraperService:
         """
         collector_id = self._collector_id()
 
+        if trigger_failure:
+            self.state.simulate_failure()
+
+        # If simulation state is active, extraction fails with broken selectors
+        if self.state.simulation_active:
+            broken_sel_str = ", ".join(self.state.active_selectors.values())
+            logger.warning(
+                "Scraper execution blocked: Simulation is active with broken selectors (%s)",
+                broken_sel_str,
+            )
+            return ScrapeResult(
+                collector_id=collector_id,
+                status=ScrapeStatus.FAILED,
+                records_extracted=0,
+                data=[],
+                error=f"SelectorNotFound: {broken_sel_str}",
+            )
+
         try:
             raw_payload = self.client.execute(
                 target_url=target_url,
-                trigger_failure=trigger_failure,
+                trigger_failure=False,
             )
         except ScraperExecutionError as exc:
             logger.error("Scraper execution failed: %s", exc)

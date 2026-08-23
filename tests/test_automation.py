@@ -389,7 +389,13 @@ class TestHealingRouter(unittest.TestCase):
     """Tests for FastAPI endpoints mounted from healing_router."""
 
     def setUp(self):
+        from backend.scraper.state import runtime_state
+        runtime_state.reset()
         self.client = TestClient(app)
+
+    def tearDown(self):
+        from backend.scraper.state import runtime_state
+        runtime_state.reset()
 
     def test_get_healing_status_endpoint(self):
         response = self.client.get("/api/healing/status")
@@ -1158,8 +1164,83 @@ class TestPhase4AttackSuite(unittest.TestCase):
         self.assertLessEqual(len(result.attempts), 2)
 
 
+class TestDemoFlowLifecycle(unittest.TestCase):
+    """
+    Automated verification of the end-to-end hackathon demo lifecycle:
+    Normal Scrape -> Simulate Failure -> Failed Scrape -> Self-Healing Recovery -> Recovered Scrape.
+    """
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from backend.main import app
+        from backend.scraper.state import runtime_state
+
+        self.client = TestClient(app)
+        self.runtime_state = runtime_state
+        self.runtime_state.reset()
+
+    def tearDown(self):
+        self.runtime_state.reset()
+
+    def test_demo_lifecycle_full_sequence(self):
+        """
+        Test 1: Normal scrape succeeds.
+        Test 2: After simulation, scrape reports failure/0 records.
+        Test 3: Self-healing after simulation recovers records.
+        Test 4: Recovered selectors are dynamically discovered.
+        Test 5: After recovery, normal scraping works again.
+        Test 6: Simulation does not mutate persistent settings or live collector IDs.
+        """
+        # Step 1: Normal scrape
+        resp1 = self.client.get("/api/scrape")
+        self.assertEqual(resp1.status_code, 200)
+        data1 = resp1.json()
+        self.assertEqual(data1["status"], "success")
+        self.assertGreater(data1["records_extracted"], 0)
+
+        # Step 2: Trigger Simulated Failure
+        sim_resp = self.client.post("/api/healing/simulate-failure")
+        self.assertEqual(sim_resp.status_code, 200)
+        sim_data = sim_resp.json()
+        self.assertEqual(sim_data["status"], "failed")
+        self.assertTrue(sim_data["simulation_active"])
+        self.assertEqual(sim_data["records_extracted"], 0)
+
+        # Step 2b: Subsequent scrape MUST fail while simulation is active
+        scrape_fail_resp = self.client.get("/api/scrape")
+        self.assertEqual(scrape_fail_resp.status_code, 200)
+        fail_data = scrape_fail_resp.json()
+        self.assertEqual(fail_data["status"], "failed")
+        self.assertEqual(fail_data["records_extracted"], 0)
+        self.assertIn("SelectorNotFound", fail_data["error"])
+
+        # Step 3 & 4: Self-Healing Recovery discovers replacements and patches runtime state
+        recover_resp = self.client.post("/api/healing/recover")
+        self.assertEqual(recover_resp.status_code, 200)
+        rec_data = recover_resp.json()
+        self.assertTrue(rec_data["repaired"])
+        self.assertTrue(rec_data["validation_result"])
+        self.assertEqual(rec_data["overall_status"], "FULLY HEALED")
+        self.assertGreater(rec_data["records_after"], 0)
+
+        # Step 5: After recovery, normal scrape works again
+        fresh_scrape = self.client.get("/api/scrape")
+        self.assertEqual(fresh_scrape.status_code, 200)
+        fresh_data = fresh_scrape.json()
+        self.assertEqual(fresh_data["status"], "success")
+        self.assertGreater(fresh_data["records_extracted"], 0)
+
+        # Step 6: Settings and collector configurations remain intact
+        status_resp = self.client.get("/api/healing/status")
+        self.assertEqual(status_resp.status_code, 200)
+        status_data = status_resp.json()
+        self.assertIn("collector_id", status_data)
+        self.assertEqual(status_data["confidence_threshold"], 0.75)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

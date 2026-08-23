@@ -27,9 +27,15 @@ class TestScraperEngine(unittest.TestCase):
     """Core tests for mock scraper engine execution."""
 
     def setUp(self):
+        from backend.scraper.state import runtime_state
+        runtime_state.reset()
         self.mock_service = ScraperService(
             settings=ScraperSettings(scraper_mode=ScraperMode.MOCK)
         )
+
+    def tearDown(self):
+        from backend.scraper.state import runtime_state
+        runtime_state.reset()
 
     def test_mock_scrape_success(self):
         result = self.mock_service.execute_dict(trigger_failure=False)
