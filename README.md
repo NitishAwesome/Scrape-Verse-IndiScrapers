@@ -32,8 +32,7 @@ ScrapeGuard can also safely refuse to repair when there is not enough evidence i
 
 ##  Demo Video
 
-[![ScrapeGuard Demo](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)]([REPLACE_WITH_YOUTUBE_DEMO_URL](https://youtu.be/8IvPIBiVpgo?si=rvZHz_Q3yKRs-Zwu))
-
+[![ScrapeGuard Demo](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](https://youtu.be/8IvPIBiVpgo?si=rvZHz_Q3yKRs-Zwu)
 ---
 
 ## 1. The Problem
